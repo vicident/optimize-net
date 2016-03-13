@@ -1,29 +1,35 @@
 require 'nn'
 
+local function keepTrack(t, track, entry_fun, fun, ...)
+  if torch.isTensor(t) and t:storage() then
+    local ptr = torch.pointer(t:storage())
+    if not track[ptr] then
+      track[ptr] = entry_fun(t, ...)
+    end
+    if fun then
+      fun(t,track,...)
+    end
+    return
+  end
+  if torch.type(t) == 'table' then
+    for k, v in ipairs(t) do
+      keepTrack(v, track, entry_fun, fun, ...)
+    end
+  end
+end
 
 function usedMemory(net, input, func)
   local func = func or 'updateOutput'
   net[func](net, input)
   local tensors = {}
-  local function keepTrack(t)
-    if torch.isTensor(t) and t:storage() then
-      local ptr = torch.pointer(t:storage())
-      if not tensors[ptr] then
-        tensors[ptr] = t
-      end
-      return
-    end
-    if torch.type(t) == 'table' then
-      for k, v in ipairs(t) do
-        keepTrack(v)
-      end
-    end
+  local function entry_fun(t)
+    return t
   end
   local function new_func(m)
     local basefunc = m[func]
     m[func] = function(self, input)
-      keepTrack(input)
-      keepTrack(self.output)
+      keepTrack(input, tensors, entry_fun)
+      keepTrack(self.output, tensors, entry_fun)
       return basefunc(self, input)
     end
   end
@@ -41,57 +47,77 @@ function usedMemory(net, input, func)
   return total_size--/(1024*1024) -- MB
 end
 
+
 local kNotUsed = 10000---1
 local kNotDefined = 0
 local kMinimumForSharing = 2
 local kAlwaysLive = 10000
 
 local function analyse(net, input, func)
-  local analysis = {}
-  local analysis2 = {}
   local func = func or 'updateOutput'
-  net[func](net, input)
-  local c = 1
-  local function keepTrack(t, var, c, name, f, notUsed)
-    if torch.isTensor(t) and t:storage() then
-      local ptr = torch.pointer(t:storage())
-      if not analysis[ptr] then
-        --analysis[ptr] = {[var]=c, name=name, ptr=ptr, tensor=t}
-        analysis[ptr] = {used=kNotUsed,defined=kNotDefined, name=name, ptr=ptr, tensor=t}
-        table.insert(analysis2,analysis[ptr])
-      end
-      local val = analysis[ptr][var]
-      if val == notUsed then
-        analysis[ptr][var] = c
-      else
-        analysis[ptr][var] = f(c,val)
-      end
-      return
-    end
-    if torch.type(t) == 'table' then
-      for k, v in ipairs(t) do
-        keepTrack(v, var, c, name, f, notUsed)
-      end
+  local grad
+  if func == 'backward' then
+    -- need to run forward before backward
+    grad = net['forward'](net, input)
+  end
+  -- do a pass over the network to initialize its fields
+  net[func](net, input, grad)
+
+  local track = {}
+  local analysis = {}
+
+  local function entry_fun(t, args)
+    local ptr = torch.pointer(t:storage())
+    local info = {used=kNotUsed, defined=kNotDefined,
+                  name=args.name, ptr=ptr, tensor=t}
+    table.insert(analysis, info)
+    return info
+  end
+
+  local function fun(t, track, args)
+    local ptr = torch.pointer(t:storage())
+    local val = track[ptr][args.var]
+    if val == args.notUsed then
+      track[ptr][args.var] = args.c
+    else
+      track[ptr][args.var] = args.f(args.c,val)
     end
   end
-  local function new_func(m)
+
+  local c = 1
+  local function apply_func(m)
     local basefunc = m[func]
+    local base_opts = {
+      analysis=analysis, c=c, name=tostring(m),
+      kNotUsed=kNotUsed, kNotDefined=kNotDefined
+    }
     m[func] = function(self, input)
-      --if torch.typename(m) ~= 'nn.Sequential' then
-      keepTrack(input, 'used', c, tostring(m), math.max, kNotUsed)
-      keepTrack(self.output, 'defined', c, tostring(m), math.min, kNotDefined)
+      --local opts = {}; for k, v in pairs(base_opts) do opts[k] = v; end
+      --opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      keepTrack(input, track, entry_fun, fun,-- opts)--[[
+            {var='used', c=c, f=math.max,
+             notUsed=kNotUsed, name=tostring(m)})--]]
+
+      --opts = {}; for k, v in pairs(base_opts) do opts[k] = v; end
+      --opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+      keepTrack(self.output, track, entry_fun, fun,-- opts)--[[
+            {var='defined',c=c, f=math.min,
+             notUsed=kNotDefined, name=tostring(m)})--]]
       c = c + 1
-      --end
       return basefunc(self,input)
     end
   end
-  net:apply(new_func)
-  net[func](net, input)
+  net:apply(apply_func)
+  net[func](net, input, grad)
   local function trackInputs(t)
     if torch.isTensor(t) then
       local f = function(a,b) return a end
-      keepTrack(t, 'used', kAlwaysLive, 'input', f, 0)
-      keepTrack(t, 'defined', -kAlwaysLive, 'input', f, 0)
+      keepTrack(t, track, entry_fun, fun,
+        {var='used', c=kAlwaysLive,
+         f=f, notUsed=0, name='input'})
+      keepTrack(t, track, entry_fun, fun,
+        {var='defined', c=-kAlwaysLive,
+         f=f, notUsed=0, name='input'})
     else
       for k,v in ipairs(t) do
         trackInputs(v)
@@ -103,7 +129,7 @@ local function analyse(net, input, func)
   net:apply(function(x)
     x[func] = nil
   end)
-  return analysis2
+  return analysis
 end
 
 local function isCompatible(candidate, assignment)
@@ -113,14 +139,14 @@ local function isCompatible(candidate, assignment)
   if candidate.tensor:numel() < kMinimumForSharing then
     return false
   end
-  local a_used = assignment[#assignment].used-- or -1
+  local a_used = assignment[#assignment].used
   return candidate.defined > a_used
 end
 
 local function assign(net, analysis)
   table.sort(analysis, function(a,b)
-    local x = a.used-- or -1
-    local y = b.used-- or -1
+    local x = a.used
+    local y = b.used
     return x < y
   end)
   local assignments = {}
@@ -153,7 +179,7 @@ local function applyAssignments(net, assignments)
   end
 end
 
-function optimizeMemory(net, input)
+function optimizeMemory(net, input, opts)
   local analysis = analyse(net, input)
 --  print('Analysis')
 --  print(analysis)
@@ -177,6 +203,7 @@ function removeOptimization(net)
   
   net:apply(function(m)
     rem(m.output)
+    rem(m.gradInput)
   end)
 end
 
