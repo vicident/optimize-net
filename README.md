@@ -18,6 +18,10 @@ For that, we have the `createGraph(net, input, opts)` function, which creates th
 graph corresponding to the network `net`. The generated graph contains the storage
 id of each `output`, and same colors means same storage.
 
+Note that `net` is a `nn` model, and **not** a `nngraph` network. This allows us
+to use `optnet.graphgen` to generate graph visualizations of `nn` networks without
+having to use `nngraph`.
+
 Let's have a look:
 
 ```lua
