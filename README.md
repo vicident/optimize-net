@@ -1,12 +1,13 @@
 #OptNet - reducing memory usage in torch neural networks
 
 Memory optimizations for torch neural networks.
+
 Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-exts
 
 ## How does it work ?
 
-It goes over the network and verify which buffers can be reused (currently only
-the `output` of each module).
+It goes over the network and verify which buffers can be reused. Currently only
+the `output` of each module are reused.
 
 ## Visualizing the memory reuse
 
@@ -34,7 +35,10 @@ graph.dot(g,modelname,modelname)
 
 This generates the following graph:
 
-Now what happens after we optimize the network ?
+![GoogleNet without memory optimization](googlenet.gif)
+
+Now what happens after we optimize the network ? Check the colors and the storage
+ids.
 
 ```lua
 models = require 'optnet.models'
@@ -51,3 +55,4 @@ g = generateGraph(net, input)
 
 graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 ```
+![GoogleNet with memory optimization](googlenet_optimized.gif)
