@@ -35,7 +35,7 @@ graph.dot(g,modelname,modelname)
 
 This generates the following graph:
 
-![GoogleNet without memory optimization](googlenet.gif)
+![GoogleNet without memory optimization](doc/googlenet.gif)
 
 Now what happens after we optimize the network ? Check the colors and the storage
 ids.
@@ -55,4 +55,4 @@ g = generateGraph(net, input)
 
 graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 ```
-![GoogleNet with memory optimization](googlenet_optimized.gif)
+![GoogleNet with memory optimization](doc/googlenet_optimized.gif)
