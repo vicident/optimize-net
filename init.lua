@@ -1,8 +1,8 @@
 require 'nn'
 
---local utils = require 'optimize-nn.utils'
-local utils = dofile 'utils.lua'
-usedMemory = utils.usedMemory
+local utils = require 'optnet.utils'
+
+local optnet = {}
 
 local kNotUsed = 10000---1
 local kNotDefined = 0
@@ -131,7 +131,7 @@ local function applyAssignments(net, assignments)
   end
 end
 
-function optimizeMemory(net, input, opts)
+function optnet.optimizeMemory(net, input, opts)
   local analysis = analyse(net, input)
 --  print('Analysis')
 --  print(analysis)
@@ -141,7 +141,7 @@ function optimizeMemory(net, input, opts)
   applyAssignments(net, assignments)
 end
 
-function removeOptimization(net)
+function optnet.removeOptimization(net)
   local function rem(m)
     if torch.isTensor(m) then
       m:set()
@@ -159,4 +159,5 @@ function removeOptimization(net)
   end)
 end
 
+return optnet
 

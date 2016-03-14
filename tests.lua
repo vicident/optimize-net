@@ -1,9 +1,10 @@
-require 'optimize-nn'
+local optnet = require 'optnet'
+local models = require 'optnet.models'
+local utils = require 'optnet.utils'
+local usedMemory = utils.usedMemory
 
 local optest = torch.TestSuite()
 local tester = torch.Tester()
-
-local models = require 'models'
 
 local function genericTestForward(model,opts)
   local net, input = models[model](opts)
@@ -12,7 +13,7 @@ local function genericTestForward(model,opts)
 
   local mem1 = usedMemory(net,input)
 
-  optimizeMemory(net, input)
+  optnet.optimizeMemory(net, input)
 
   local out = net:forward(input):clone()
   local mem2 = usedMemory(net,input)
@@ -32,6 +33,10 @@ end
 
 function optest.alexnet()
   genericTestForward('alexnet')
+end
+
+function optest.googlenet()
+  genericTestForward('googlenet')
 end
 
 function optest.resnet20()
