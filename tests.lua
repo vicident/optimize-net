@@ -1,7 +1,6 @@
-local optnet = require 'optnet'
+local optnet = require 'optnet.env'
 local models = require 'optnet.models'
---local utils = require 'optnet.utils'
---local usedMemory = utils.usedMemory
+
 local countUsedMemory = optnet.countUsedMemory
 
 local optest = torch.TestSuite()
@@ -65,6 +64,8 @@ function optest.resnet110()
 end
 
 tester:add(optest)
-tester:run()
 
-
+function optnet.test(tests)
+  tester:run(tests)
+  return tester
+end

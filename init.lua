@@ -2,6 +2,7 @@ require 'nn'
 
 local optnet = require 'optnet.env'
 require 'optnet.countUsedMemory'
+require 'optnet.tests'
 
 local utils = require 'optnet.utils'
 
