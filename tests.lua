@@ -1,7 +1,8 @@
 local optnet = require 'optnet'
 local models = require 'optnet.models'
-local utils = require 'optnet.utils'
-local usedMemory = utils.usedMemory
+--local utils = require 'optnet.utils'
+--local usedMemory = utils.usedMemory
+local countUsedMemory = optnet.countUsedMemory
 
 local optest = torch.TestSuite()
 local tester = torch.Tester()
@@ -11,12 +12,12 @@ local function genericTestForward(model,opts)
   net:evaluate()
   local out_orig = net:forward(input):clone()
 
-  local mem1 = usedMemory(net,input)
+  local mem1 = optnet.countUsedMemory(net,input)
 
   optnet.optimizeMemory(net, input)
 
   local out = net:forward(input):clone()
-  local mem2 = usedMemory(net,input)
+  local mem2 = countUsedMemory(net,input)
   tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
   tester:assertle(mem2, mem1, 'Optimized model uses more memory! '..
   'Before: '.. mem1..' bytes, After: '..mem2..' bytes')
@@ -37,6 +38,10 @@ end
 
 function optest.googlenet()
   genericTestForward('googlenet')
+end
+
+function optest.vgg()
+  genericTestForward('vgg')
 end
 
 function optest.resnet20()

@@ -1,8 +1,9 @@
 require 'nn'
 
-local utils = require 'optnet.utils'
+local optnet = require 'optnet.env'
+require 'optnet.countUsedMemory'
 
-local optnet = {}
+local utils = require 'optnet.utils'
 
 local kNotUsed = 10000---1
 local kNotDefined = 0
@@ -11,13 +12,6 @@ local kAlwaysLive = 10000
 
 local function analyse(net, input, func)
   local func = func or 'updateOutput'
-  local grad
-  if func == 'backward' then
-    -- need to run forward before backward
-    grad = net['forward'](net, input)
-  end
-  -- do a pass over the network to initialize its fields
-  net[func](net, input, grad)
 
   local track = {}
   local analysis = {}
@@ -81,6 +75,17 @@ local function analyse(net, input, func)
   net:apply(function(x)
     x[func] = nil
   end)
+
+  -- disable backward pass if in evaluation mode
+  if func == 'updateOutput' then
+    net:apply(function(m)
+      m.updateGradInput = function(self, input, gradInput)
+        error([[Backward pass disabled!
+          You are using inference optimization.
+          Call optnet.removeOptimization(net) to enable backward again]])
+      end
+    end)
+  end
   return analysis
 end
 
@@ -131,13 +136,79 @@ local function applyAssignments(net, assignments)
   end
 end
 
+local function defaultValue(var, val)
+  if var == nil then
+    var = val
+  end
+  return var
+end
+
+-- set to inplace modules that allows it
+local function setInplace(net, opts)
+  local inplace = defaultValue(opts.inplace, true)
+ 
+  if inplace then
+    net:apply(function(m)
+      if m.inplace ~= nil then
+        -- inplace is not always supported for threshold,
+        -- depending on the values. Disabling it for the moment
+        if torch.typename(m) ~= 'nn.Threshold' then
+          m.inplace = true
+        end
+      end
+    end)
+  end
+end
+
+local reusableBuffers = {
+['nn.SpatialConvolution'] = {{'finput','fgradInput'},{}},
+['nn.SpatialConvolutionMM'] = {{'finput','fgradInput'},{}},
+['nn,Normalize'] = {{'norm','buffer','normp','_indices'},{}},
+['nn.SpatialCrossMapLRN'] = {{'scale'},{}},
+['nn.SpatialMaxPooling'] = {{'indices'},{}},
+}
+-- basic reusing scheme: keeps a list of all possible buffers
+-- that can be reused in evaluation mode and also in training
+-- mode.
+local function reuseStateBuffers(net, opts)
+  local reuseBuffers = defaultValue(opts.reuseBuffers, true)
+  if reuseBuffers then
+    local reusedBuffers = {}
+    net:apply(function(m)
+      local name = torch.typename(m)
+      if reusableBuffers[name] then
+        local rb = reusableBuffers[name][1]
+        for k, v in ipairs(rb) do
+          if m[v] then
+            reusedBuffers[name..','..v] = reusedBuffers[name..','..v] or m[v]:storage()
+            if reusedBuffers[name..','..v] then
+              m[v]:set(reusedBuffers[name..','..v])
+            end
+          end
+        end
+      end
+    end)
+  end
+end
+
 function optnet.optimizeMemory(net, input, opts)
+  opts = opts or {}
+  local func = defaultValue(opts.func,'forward')
+
+  local grad
+  if func == 'backward' then
+    -- need to run forward before backward
+    grad = net['forward'](net, input)
+  end
+  -- do a pass over the network to initialize its fields
+  net[func](net, input, grad)
+
+  setInplace(net, opts)
+  reuseStateBuffers(net, opts)
+
+  -- share outputs
   local analysis = analyse(net, input)
---  print('Analysis')
---  print(analysis)
   local assignments = assign(net,analysis)
---  print('Assignments')
---  print(assignments)
   applyAssignments(net, assignments)
 end
 
@@ -156,6 +227,18 @@ function optnet.removeOptimization(net)
   net:apply(function(m)
     rem(m.output)
     rem(m.gradInput)
+    local name = torch.typename(m)
+    if reusableBuffers[name] then
+      local rb = reusableBuffers[name][1]
+      for k, v in ipairs(rb) do
+        if m[v] then
+          m[v]:set()
+        end
+      end
+    end
+
+    -- remove backward blocking
+    m.updateGradInput = nil
   end)
 end
 

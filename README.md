@@ -6,8 +6,19 @@ Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-
 
 ## How does it work ?
 
-It goes over the network and verify which buffers can be reused. Currently only
-the `output` of each module are reused.
+It goes over the network and verify which buffers can be reused.
+Currently, it only supports evaluation mode, but training mode will soon be included.
+
+Here is a list of currently tested modules (numbers are for CPU version, with batch size of 1, in the format (total memory used, memory used for the outputs)):
+
+| Network | before optimization | after optimization | Relative save |
+| ------- | :--------: | :-------: | :------: |
+|alexnet | (972MB, 6MB) | (933MB, 1.5MB) | (4%, 75%) |
+|vgg16 | (2311MB, 69MB) | (2119MB, 30MB) | (8%, 55%) |
+|googlenet | (505MB, 69MB) | (337MB, 30MB) | (33%, 57%) |
+|resnet 110 (cifar)| (113MB, 16MB) | (32MB, 4MB) | (72%, 73%) |
+
+Note that most of the used memory goes to the convolution buffers from `nn`.
 
 ## Visualizing the memory reuse
 
@@ -25,6 +36,8 @@ having to use `nngraph`.
 Let's have a look:
 
 ```lua
+-- some handy models are defined in optnet.models
+-- line alexnet, googlenet and resnet
 models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
@@ -34,7 +47,6 @@ generateGraph = require 'optnet.graphgen'
 g = generateGraph(net, input)
 
 graph.dot(g,modelname,modelname)
-
 ```
 
 This generates the following graph:
@@ -49,11 +61,13 @@ models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
+opts = {inplace=true, reuseBuffers=true}
+
 generateGraph = require 'optnet.graphgen'
 
 optnet = require 'optnet'
 
-optnet.optimizeMemory(net, input)
+optnet.optimizeMemory(net, input, opts)
 
 g = generateGraph(net, input)
 
@@ -71,22 +85,22 @@ Here is an example
 
 ```lua
 optnet = require 'optnet'
-utils = require 'optnet.utils'
-usedMemory = utils.usedMemory
 
 models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
-mem1 = usedMemory(net, input)
+opts = {countBuffers=true}
+
+mem1 = optnet.countUsedMemory(net, input, opts)
 
 optnet.optimizeMemory(net, input)
 
-mem2 = usedMemory(net, input)
+mem2 = optnet.countUsedMemory(net, input, opts)
 
 optnet.removeOptimization(net)
 
-mem3 = usedMemory(net, input)
+mem3 = optnet.countUsedMemory(net, input, opts)
 
 print('Before optimization        : '.. mem1/1024/1024 .. ' MBytes')
 print('After optimization         : '.. mem2/1024/1024 .. ' MBytes')
