@@ -1,52 +1,8 @@
 require 'nn'
 
-local function keepTrack(t, track, entry_fun, fun, ...)
-  if torch.isTensor(t) and t:storage() then
-    local ptr = torch.pointer(t:storage())
-    if not track[ptr] then
-      track[ptr] = entry_fun(t, ...)
-    end
-    if fun then
-      fun(t,track,...)
-    end
-    return
-  end
-  if torch.type(t) == 'table' then
-    for k, v in ipairs(t) do
-      keepTrack(v, track, entry_fun, fun, ...)
-    end
-  end
-end
-
-function usedMemory(net, input, func)
-  local func = func or 'updateOutput'
-  net[func](net, input)
-  local tensors = {}
-  local function entry_fun(t)
-    return t
-  end
-  local function new_func(m)
-    local basefunc = m[func]
-    m[func] = function(self, input)
-      keepTrack(input, tensors, entry_fun)
-      keepTrack(self.output, tensors, entry_fun)
-      return basefunc(self, input)
-    end
-  end
-  net:apply(new_func)
-  net[func](net, input)
-  -- clean up the modified function
-  net:apply(function(x)
-    x[func] = nil
-  end)
-  local total_size = 0
-  for k,v in pairs(tensors) do
-    local size = v:storage():size()*v:elementSize()
-    total_size = total_size + size
-  end
-  return total_size--/(1024*1024) -- MB
-end
-
+--local utils = require 'optimize-nn.utils'
+local utils = dofile 'utils.lua'
+usedMemory = utils.usedMemory
 
 local kNotUsed = 10000---1
 local kNotDefined = 0
@@ -87,22 +43,18 @@ local function analyse(net, input, func)
   local c = 1
   local function apply_func(m)
     local basefunc = m[func]
-    local base_opts = {
-      analysis=analysis, c=c, name=tostring(m),
-      kNotUsed=kNotUsed, kNotDefined=kNotDefined
-    }
     m[func] = function(self, input)
-      --local opts = {}; for k, v in pairs(base_opts) do opts[k] = v; end
-      --opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
-      keepTrack(input, track, entry_fun, fun,-- opts)--[[
-            {var='used', c=c, f=math.max,
-             notUsed=kNotUsed, name=tostring(m)})--]]
+      local opts = {
+        analysis=analysis, c=c, name=tostring(m),
+        kNotUsed=kNotUsed, kNotDefined=kNotDefined
+      }
 
-      --opts = {}; for k, v in pairs(base_opts) do opts[k] = v; end
-      --opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
-      keepTrack(self.output, track, entry_fun, fun,-- opts)--[[
-            {var='defined',c=c, f=math.min,
-             notUsed=kNotDefined, name=tostring(m)})--]]
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      utils.keepTrack(input, track, entry_fun, fun, opts)
+
+      opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+      utils.keepTrack(self.output, track, entry_fun, fun, opts)
+
       c = c + 1
       return basefunc(self,input)
     end
@@ -112,10 +64,10 @@ local function analyse(net, input, func)
   local function trackInputs(t)
     if torch.isTensor(t) then
       local f = function(a,b) return a end
-      keepTrack(t, track, entry_fun, fun,
+      utils.keepTrack(t, track, entry_fun, fun,
         {var='used', c=kAlwaysLive,
          f=f, notUsed=0, name='input'})
-      keepTrack(t, track, entry_fun, fun,
+      utils.keepTrack(t, track, entry_fun, fun,
         {var='defined', c=-kAlwaysLive,
          f=f, notUsed=0, name='input'})
     else
