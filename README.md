@@ -14,7 +14,7 @@ the `output` of each module are reused.
 We can analyse the sharing of the internal buffers by looking at the computation
 graph of the network before and after the sharing.
 
-For that, we have the `createGraph(net, input, opts)` function, which creates the
+For that, we have the `graphgen(net, input, opts)` function, which creates the
 graph corresponding to the network `net`. The generated graph contains the storage
 id of each `output`, and same colors means same storage.
 
