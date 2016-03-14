@@ -9,7 +9,7 @@ Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-
 It goes over the network and verify which buffers can be reused.
 Currently, it only supports evaluation mode, but training mode will soon be included.
 
-Here is a list of currently tested modules (numbers are for CPU version, with batch size of 1, in the format (total memory used, memory used for the outputs)):
+Here is a list of currently tested modules. Numbers are for CPU version, with batch size of 1, in the format (total memory used, memory used for the outputs):
 
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
@@ -37,7 +37,7 @@ Let's have a look:
 
 ```lua
 -- some handy models are defined in optnet.models
--- line alexnet, googlenet and resnet
+-- like alexnet, googlenet, vgg and resnet
 models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
@@ -78,8 +78,8 @@ graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 ## Counting the amount of saved memory
 
 We can also provide a function to compute the amount of memory used by the network
-in bytes, which allows us to check the amount of saved memory. It currently
-counts only the `output` fields of each module, and not it's internal buffers.
+in bytes, which allows us to check the amount of saved memory.
+To count the only the memory used by the `output` state variables of each module, pass the option `{countBuffers=false}`.
 
 Here is an example
 
@@ -90,6 +90,7 @@ models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
+-- count the memory used by all the buffers
 opts = {countBuffers=true}
 
 mem1 = optnet.countUsedMemory(net, input, opts)
