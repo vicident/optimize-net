@@ -20,6 +20,16 @@ Here is a list of currently tested modules. Numbers are for CPU version, with ba
 
 Note that most of the used memory goes to the convolution buffers from `nn`.
 
+In a more realistic setup where we use `cudnn` and batch size of 128, the gains are
+way more significant. The total memory usage is shown in the following table:
+
+| Network | before optimization | after optimization | Relative save |
+| ------- | :--------: | :-------: | :------: |
+|alexnet | 1386MB | 1086MB | 22% |
+|vgg16 | 9839MB | 7425MB | 25% |
+|googlenet | 9303MB | 6807MB | 27% |
+|resnet 110 (cifar)| 1575MB | 815MB | 48% |
+
 ## Visualizing the memory reuse
 
 We can analyse the sharing of the internal buffers by looking at the computation
