@@ -27,6 +27,29 @@ models.basic2 = function()
   local input = torch.rand(1,1,32,32)
   return m, input
 end
+models.basic_concat = function()
+  local m = nn.Sequential()
+  local cat = nn.ConcatTable()
+  local b1 = nn.Sequential():add(nn.Linear(2,1)):add(nn.ReLU(true)):add(nn.Linear(1,1))
+  local b2 = nn.Sequential():add(nn.Linear(2,2)):add(nn.ReLU())
+  local b3 = nn.Sequential():add(nn.Linear(2,3)):add(nn.ReLU(true)):add(nn.Linear(3,2))
+  cat:add(b1):add(b2):add(b3)
+  local cat2 = nn.ConcatTable()
+  local bb1 = nn.SelectTable(1)
+  local bb2 = nn.NarrowTable(2,2)
+  cat2:add(bb1):add(bb2)
+  local prl = nn.ParallelTable()
+  local bbb1 = nn.Sequential():add(nn.Linear(1,2))
+  local bbb2 = nn.CAddTable()
+  prl:add(bbb1):add(bbb2)
+  local final = nn.CMulTable()
+  m:add(cat):add(cat2):add(prl):add(final)
+
+  local input = torch.rand(2,2)
+  return m, input
+
+end
+
 models.alexnet = function()
   -- taken from soumith's imagenet-multiGPU
   -- https://github.com/soumith/imagenet-multiGPU.torch/blob/master/models/alexnet.lua

@@ -13,10 +13,10 @@ Here is a list of currently tested modules. Numbers are for CPU version, with ba
 
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
-|alexnet | (972MB, 6MB) | (933MB, 1.5MB) | (4%, 75%) |
-|vgg16 | (2311MB, 69MB) | (2119MB, 30MB) | (8%, 55%) |
-|googlenet | (505MB, 69MB) | (337MB, 30MB) | (33%, 57%) |
-|resnet 110 (cifar)| (113MB, 16MB) | (32MB, 4MB) | (72%, 73%) |
+|alexnet | (973MB, 6MB) | (934MB, 1.5MB) | (4%, 75%) |
+|vgg16 | (2311MB, 69MB) | (2119MB, 31MB) | (8%, 55%) |
+|googlenet | (505MB, 69MB) | (339MB, 31MB) | (33%, 54%) |
+|resnet 110 (cifar)| (113MB, 16MB) | (28MB, 0.5MB) | (75%, 97%) |
 
 Note that most of the used memory goes to the convolution buffers from `nn`.
 

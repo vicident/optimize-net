@@ -31,6 +31,10 @@ function optest.basic_conv()
   genericTestForward('basic2')
 end
 
+function optest.basic_concat()
+  genericTestForward('basic_concat')
+end
+
 function optest.alexnet()
   genericTestForward('alexnet')
 end

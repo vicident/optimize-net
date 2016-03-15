@@ -44,12 +44,33 @@ local function analyse(net, input, func)
         kNotUsed=kNotUsed, kNotDefined=kNotDefined
       }
 
+      -- always keep track of the input
       opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
       utils.keepTrack(input, track, entry_fun, fun, opts)
 
-      opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
-      utils.keepTrack(self.output, track, entry_fun, fun, opts)
+      if not m.modules then
+        -- always keep track of the outputs of non-containers
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.output, track, entry_fun, fun, opts)
+      elseif torch.typename(m) == 'nn.Concat' or
+        torch.typename(m) == 'nn.Parallel' or
+        torch.typename(m) == 'nn.DepthConcat' then
 
+        -- for containers that do some operations on the input, need to keep
+        -- track of each output of its branches uppon entry on the module,
+        -- as well as to keep track of it's own output (as it's a non-trivial
+        -- operation on the childs output, contrary to nn.Sequential for
+        -- example)
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.output, track, entry_fun, fun, opts)
+
+        for i,branch in ipairs(m.modules) do
+          local last_module = branch:get(branch:size())
+          local out = last_module.output
+          opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+          utils.keepTrack(out, track, entry_fun, fun, opts)
+        end
+      end
       c = c + 1
       return basefunc(self,input)
     end
