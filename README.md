@@ -26,9 +26,9 @@ way more significant. The total memory usage is shown in the following table:
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
 |alexnet | 1386MB | 1086MB | 22% |
-|vgg16 | 9839MB | 7425MB | 25% |
-|googlenet | 9303MB | 6807MB | 27% |
-|resnet 110 (cifar)| 1575MB | 815MB | 48% |
+|vgg16 | 9839MB | 7413MB | 25% |
+|googlenet | 9303MB | 6905MB | 26% |
+|resnet 110 (cifar)| 1575MB | 570MB | 64% |
 
 ## Visualizing the memory reuse
 
