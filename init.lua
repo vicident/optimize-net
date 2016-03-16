@@ -192,6 +192,16 @@ local function reuseStateBuffers(net, opts)
   end
 end
 
+-- needed for cudnn
+local function resetInputDescriptors(net)
+  net:apply(function(m)
+    if torch.typename(m):find('cudnn') and
+       torch.typename(m.iSize) == 'torch.LongStorage' then
+      m.iSize:fill(0)
+    end
+  end)
+end
+
 function optnet.optimizeMemory(net, input, opts)
   opts = opts or {}
   local func = defaultValue(opts.func,'forward')
@@ -211,6 +221,7 @@ function optnet.optimizeMemory(net, input, opts)
   local analysis = analyse(net, input)
   local assignments = assign(net,analysis)
   applyAssignments(net, assignments)
+  resetInputDescriptors(net)
 end
 
 function optnet.removeOptimization(net)
@@ -238,6 +249,7 @@ function optnet.removeOptimization(net)
       end
     end
 
+    resetInputDescriptors(net)
     -- remove backward blocking
     m.updateGradInput = nil
   end)
