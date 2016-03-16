@@ -6,7 +6,7 @@ local colorNames = {
   "antiquewhite4","aquamarine","aquamarine1","aquamarine2","aquamarine3",
   "aquamarine4","azure","azure1","azure2","azure3",
   "azure4","beige","bisque","bisque1","bisque2",
-  "bisque3","bisque4","black","blanchedalmond","blue",
+  "bisque3","bisque4","blanchedalmond","blue",
   "blue1","blue2","blue3","blue4","blueviolet",
   "brown","brown1","brown2","brown3","brown4",
   "burlywood","burlywood1","burlywood2","burlywood3","burlywood4",
@@ -62,7 +62,12 @@ local function generateGraph(net, input, opts)
       return name
     end
     function node:graphNodeAttributes()
-      return {color=colorNames[storageHash[data]]}
+      return {
+         color=colorNames[storageHash[data]], 
+         style = 'filled',
+         shape = 'box',
+         fontsize = 10,
+      }
     end
     return node
   end
