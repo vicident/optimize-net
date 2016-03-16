@@ -223,6 +223,29 @@ local function resetInputDescriptors(net)
   end)
 end
 
+local function removeGradParams(net, opts)
+  local removeGradParams = defaultValue(opts.removeGradParams, true)
+  if not removeGradParams then return end
+  net:apply(function(m)
+    for _, k in ipairs({'gradWeight','gradBias'}) do
+      if m[k] then
+        m[k]:set()
+      end
+    end
+  end)
+end
+
+local function addGradParams(net)
+  net:apply(function(m)
+    for k, v in pairs({weight='gradWeight',bias='gradBias'}) do
+      if m[v] then
+        m[v]:resizeAs(m[k])
+      end
+    end
+  end)
+end
+
+
 function optnet.optimizeMemory(net, input, opts)
   opts = opts or {}
   local func = defaultValue(opts.func,'forward')
@@ -237,6 +260,7 @@ function optnet.optimizeMemory(net, input, opts)
 
   setInplace(net, opts)
   reuseStateBuffers(net, opts)
+  removeGradParams(net, opts)
 
   -- share outputs
   local analysis = analyse(net, input)
@@ -271,6 +295,7 @@ function optnet.removeOptimization(net)
     end
 
     resetInputDescriptors(net)
+    addGradParams(net)
     -- remove backward blocking
     m.updateGradInput = nil
   end)
