@@ -4,10 +4,9 @@ local keepTrack = utils.keepTrack
 
 function optnet.countUsedMemory(net, input, opts)
   opts = opts or {}
-  local countBuffers = opts.countBuffers or false
   local func = opts.func or 'updateOutput'
   net[func](net, input)
-  local tensors = {}
+  local tensors = {outputs={},buffers={},params={}}
   local function entry_fun(t)
     return t
   end
@@ -15,12 +14,18 @@ function optnet.countUsedMemory(net, input, opts)
     local basefunc = m[func]
     m[func] = function(self, input)
       --keepTrack(input, tensors, entry_fun)
-      keepTrack(self.output, tensors, entry_fun)
-      if countBuffers then
-        for k, v in pairs(self) do
-          if torch.isTensor(v) then
-            keepTrack(v, tensors, entry_fun)
-          end
+      keepTrack(self.output, tensors.outputs, entry_fun)
+      for k, v in pairs(self) do
+        if torch.isTensor(v) and
+           k ~= 'weight' and k ~= 'bias' and
+           k ~= 'gradWeight' and k ~= 'gradBias' and
+           k ~= 'output' and k ~= 'gradInput' then
+          keepTrack(v, tensors.buffers, entry_fun)
+        end
+      end
+      for _, k in ipairs({'weight', 'bias', 'gradWeight','gradBias'}) do
+        if self[k] then
+          keepTrack(self[k], tensors.params, entry_fun)
         end
       end
       return basefunc(self, input)
@@ -33,9 +38,15 @@ function optnet.countUsedMemory(net, input, opts)
     x[func] = nil
   end)
   local total_size = 0
-  for k,v in pairs(tensors) do
-    local size = v:storage():size()*v:elementSize()
-    total_size = total_size + size
+  local sizes = {}
+  for typeTensor, subTensors in pairs(tensors) do
+    sizes[typeTensor] = 0
+    for k,v in pairs(subTensors) do
+      local size = v:storage():size()*v:elementSize()
+      total_size = total_size + size
+      sizes[typeTensor] = sizes[typeTensor] + size
+    end
   end
-  return total_size--/(1024*1024) -- MB
+  sizes.total_size = total_size
+  return sizes
 end
