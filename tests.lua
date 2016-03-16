@@ -1,6 +1,13 @@
 local optnet = require 'optnet.env'
 local models = require 'optnet.models'
 
+local use_cudnn = false
+
+if use_cudnn then
+  require 'cudnn'
+  require 'cunn'
+end
+
 local countUsedMemory = optnet.countUsedMemory
 
 local optest = torch.TestSuite()
@@ -9,6 +16,27 @@ local tester = torch.Tester()
 local function genericTestForward(model,opts)
   local net, input = models[model](opts)
   net:evaluate()
+  
+  if use_cudnn then
+    cudnn.convert(net,cudnn);
+    net:cuda();
+
+    local function resizeAndConvert(input)
+      local res
+      if torch.isTensor(input) then
+        local iSize = torch.Tensor(input:size():totable())[{{2,-1}}]
+        res = torch.rand(128,table.unpack(iSize:totable())):cuda()
+      else
+        res = {}
+        for k, v in ipairs(input) do
+          res[k] = resizeAndConvert(v)
+        end
+      end
+      return res
+    end
+    input = resizeAndConvert(input)
+  end
+
   local out_orig = net:forward(input):clone()
 
   local mems1 = optnet.countUsedMemory(net, input)

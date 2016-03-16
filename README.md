@@ -9,26 +9,28 @@ Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-
 It goes over the network and verify which buffers can be reused.
 Currently, it only supports evaluation mode, but training mode will soon be included.
 
-Here is a list of currently tested modules. Numbers are for CPU version, with batch size of 1, in the format (total memory used, memory used for the outputs):
+Here is a list of currently tested modules. Numbers are for CPU version, with batch size of 1, for **double** type, in the format
+**(total memory used, memory used for the outputs, memory used for the internal buffers, memory used for the parameters and grad parameters)**:
 
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
-|alexnet | (973MB, 6MB) | (934MB, 1.5MB) | (4%, 75%) |
-|vgg16 | (2311MB, 69MB) | (2119MB, 31MB) | (8%, 55%) |
-|googlenet | (505MB, 69MB) | (339MB, 31MB) | (33%, 54%) |
-|resnet 110 (cifar)| (113MB, 16MB) | (28MB, 0.5MB) | (75%, 97%) |
+|alexnet | (973MB, 6MB, 43MB, 924MB) | (472MB, 1.5MB, 9MB, 462MB) | (51%, 75%, 80%, 50%) |
+|vgg16 | (2311MB, 69MB, 215MB, 2027MB) | (1106MB, 31MB, 61MB, 1014MB) | (52%, 55%, 72%, 50%) |
+|googlenet | (505MB, 69MB, 145MB, 292MB) | (193MB, 31MB, 16MB, 146MB) | (62%, 54%, 89%, 50%) |
+|resnet 110 (cifar)| (113MB, 16MB, 71MB, 26MB) | (15MB, 0.5MB, 1.3MB, 13MB) | (87%, 97%, 98%, 50%) |
 
-Note that most of the used memory goes to the convolution buffers from `nn`.
+Note that for most of the models, for a batch size of 1 most of the memory is spent with the `weights` and `gradWeights` of the network (and the latter can be safely freed during inference).
+More interestingly, the the output size is *linearly* dependent on the batch size, which means that the total savings are much more significant for bigger batch sizes.
 
 In a more realistic setup where we use `cudnn` and batch size of 128, the gains are
-way more significant. The total memory usage is shown in the following table:
+way more significant, specially for very deep networks like resnet. The memory usage is shown in the following table (for **float** type), following **(total memory used, memory used for the outputs, memory used for the parameters and grad parameters)** as `cudnn` almost don't use internal buffers:
 
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
-|alexnet | 1386MB | 1086MB | 22% |
-|vgg16 | 9839MB | 7413MB | 25% |
-|googlenet | 9303MB | 6905MB | 26% |
-|resnet 110 (cifar)| 1575MB | 570MB | 64% |
+|alexnet | (859MB, 397MB, 462MB) | (328MB, 97MB, 231MB) | (62%, 75%, 50%) |
+|vgg16 | (5340MB, 4386MB, 1014MB) | (2467MB, 1960MB, 507MB) | (54%, 55%, 50%) |
+|googlenet | (4536MB, 4390MB, 146MB) | (2066MB, 1993MB, 73MB) | (54%, 55%, 50%) |
+|resnet 110 (cifar)| (1049MB, 1036MB, 13MB) | (39MB, 32MB, 7MB) | (96%, 97%, 50%) |
 
 ## Visualizing the memory reuse
 
@@ -89,7 +91,10 @@ graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 
 We can also provide a function to compute the amount of memory used by the network
 in bytes, which allows us to check the amount of saved memory.
-To count the only the memory used by the `output` state variables of each module, pass the option `{countBuffers=false}`.
+It decomposes the total amount of memory in three fields:
+* total memory used by the outputs of each module
+* total memory used by the internal buffers of each module
+* total memory used by the weights and gradWeights of each module.
 
 Here is an example
 
@@ -100,21 +105,18 @@ models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
--- count the memory used by all the buffers
-opts = {countBuffers=true}
-
-mem1 = optnet.countUsedMemory(net, input, opts)
+mem1 = optnet.countUsedMemory(net, input)
 
 optnet.optimizeMemory(net, input)
 
-mem2 = optnet.countUsedMemory(net, input, opts)
+mem2 = optnet.countUsedMemory(net, input)
 
 optnet.removeOptimization(net)
 
-mem3 = optnet.countUsedMemory(net, input, opts)
+mem3 = optnet.countUsedMemory(net, input)
 
-print('Before optimization        : '.. mem1/1024/1024 .. ' MBytes')
-print('After optimization         : '.. mem2/1024/1024 .. ' MBytes')
-print('After removing optimization: '.. mem3/1024/1024 .. ' MBytes')
+print('Before optimization        : '.. mem1.total_size/1024/1024 .. ' MBytes')
+print('After optimization         : '.. mem2.total_size/1024/1024 .. ' MBytes')
+print('After removing optimization: '.. mem3.total_size/1024/1024 .. ' MBytes')
 
 ```
