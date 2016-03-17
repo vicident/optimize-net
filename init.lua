@@ -6,13 +6,27 @@ require 'optnet.tests'
 
 local utils = require 'optnet.utils'
 
+local function recursiveClone(out)
+  if torch.isTensor(out) then
+    return out:clone()
+  else
+    local res = {}
+    for k, v in ipairs(out) do
+      res[k] = recursiveClone(v)
+    end
+  end
+end
+
+
+
 local kNotUsed = 10000---1
 local kNotDefined = 0
 local kMinimumForSharing = 2
 local kAlwaysLive = 10000
 
-local function analyse(net, input, func)
-  local func = func or 'updateOutput'
+local function analyse(net, input, opts)
+  opts = opts or {}
+  local mode = opts.mode or 'inference'
 
   local track = {}
   local analysis = {}
@@ -20,7 +34,7 @@ local function analyse(net, input, func)
   local function entry_fun(t, args)
     local ptr = torch.pointer(t:storage())
     local info = {used=kNotUsed, defined=kNotDefined,
-                  name=args.name, ptr=ptr, tensor=t}
+    name=args.name, ptr=ptr, tensor=t}
     table.insert(analysis, info)
     return info
   end
@@ -37,6 +51,7 @@ local function analyse(net, input, func)
 
   local c = 1
   local function apply_func(m)
+    local func = 'updateOutput'
     local basefunc = m[func]
     m[func] = function(self, input)
       local opts = {
@@ -46,12 +61,12 @@ local function analyse(net, input, func)
 
       -- always keep track of the input
       opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
-      utils.keepTrack(input, track, entry_fun, fun, opts)
+      --utils.keepTrack(input, track, entry_fun, fun, opts)
 
       if not m.modules then
         -- always keep track of the outputs of non-containers
         opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
-        utils.keepTrack(self.output, track, entry_fun, fun, opts)
+        --utils.keepTrack(self.output, track, entry_fun, fun, opts)
       elseif torch.typename(m) == 'nn.Concat' or
         torch.typename(m) == 'nn.Parallel' or
         torch.typename(m) == 'nn.DepthConcat' then
@@ -59,6 +74,53 @@ local function analyse(net, input, func)
         -- for containers that do some operations on the input, need to keep
         -- track of each output of its branches uppon entry on the module,
         -- as well as to keep track of it's own output (as it's a non-trivial
+        -- operation on the childs output, contrary to nn.Sequential for
+        -- example)
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        --utils.keepTrack(self.output, track, entry_fun, fun, opts)
+
+        for i,branch in ipairs(m.modules) do
+          local last_module = branch:get(branch:size())
+          local out = last_module.output
+          opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+          --utils.keepTrack(out, track, entry_fun, fun, opts)
+        end
+      end
+      c = c + 1
+      return basefunc(self,input)
+    end
+
+    local func = 'updateGradInput'
+    local basefunc = m[func]
+    m[func] = function(self, input, gradOutput)
+      local opts = {
+        analysis=analysis, c=c, name=tostring(m),
+        kNotUsed=kNotUsed, kNotDefined=kNotDefined
+      }
+
+      -- always keep track of the input
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      --utils.keepTrack(input, track, entry_fun, fun, opts)
+
+      -- always keep track of the gradOutput
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      utils.keepTrack(gradOutput, track, entry_fun, fun, opts)
+
+      opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+      utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+
+--[[
+      if not m.modules then
+        -- always keep track of the gradInput of non-containers
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+      elseif torch.typename(m) == 'nn.Concat' or
+        torch.typename(m) == 'nn.Parallel' or
+        torch.typename(m) == 'nn.DepthConcat' then
+
+        -- for containers that do some operations on the gradOutput, need to keep
+        -- track of each gradInput of its branches uppon entry on the module,
+        -- as well as to keep track of it's own gradInput (as it's a non-trivial
         -- operation on the childs output, contrary to nn.Sequential for
         -- example)
         opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
@@ -71,35 +133,145 @@ local function analyse(net, input, func)
           utils.keepTrack(out, track, entry_fun, fun, opts)
         end
       end
+      --]]
       c = c + 1
-      return basefunc(self,input)
+      return basefunc(self,input,gradOutput)
     end
+
+    local func = 'accGradParameters'
+    local basefunc = m[func]
+    m[func] = function(self, input, gradOutput, scale)
+      local opts = {
+        analysis=analysis, c=c, name=tostring(m),
+        kNotUsed=kNotUsed, kNotDefined=kNotDefined
+      }
+
+      -- always keep track of the input
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      --utils.keepTrack(input, track, entry_fun, fun, opts)
+
+      -- always keep track of the gradOutput
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      utils.keepTrack(gradOutput, track, entry_fun, fun, opts)
+
+      opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+      utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+
+--[[
+      if not m.modules then
+        -- always keep track of the gradInput of non-containers
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+      elseif torch.typename(m) == 'nn.Concat' or
+        torch.typename(m) == 'nn.Parallel' or
+        torch.typename(m) == 'nn.DepthConcat' then
+
+        -- for containers that do some operations on the gradOutput, need to keep
+        -- track of each gradInput of its branches uppon entry on the module,
+        -- as well as to keep track of it's own gradInput (as it's a non-trivial
+        -- operation on the childs output, contrary to nn.Sequential for
+        -- example)
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.output, track, entry_fun, fun, opts)
+
+        for i,branch in ipairs(m.modules) do
+          local last_module = branch:get(branch:size())
+          local out = last_module.output
+          opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+          utils.keepTrack(out, track, entry_fun, fun, opts)
+        end
+      end
+      --]]
+      c = c + 1
+      return basefunc(self,input,gradOutput,scale)
+    end
+
+    local func = 'backward'
+    local basefunc = m[func]
+    m[func] = function(self, input, gradOutput, scale)
+      local opts = {
+        analysis=analysis, c=c, name=tostring(m),
+        kNotUsed=kNotUsed, kNotDefined=kNotDefined
+      }
+
+      -- always keep track of the input
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      --utils.keepTrack(input, track, entry_fun, fun, opts)
+
+      -- always keep track of the gradOutput
+      opts.var = 'used'; opts.f = math.max; opts.notUsed = kNotUsed
+      utils.keepTrack(gradOutput, track, entry_fun, fun, opts)
+
+      opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+      utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+
+--[[
+      if not m.modules then
+        -- always keep track of the gradInput of non-containers
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.gradInput, track, entry_fun, fun, opts)
+      elseif torch.typename(m) == 'nn.Concat' or
+        torch.typename(m) == 'nn.Parallel' or
+        torch.typename(m) == 'nn.DepthConcat' then
+
+        -- for containers that do some operations on the gradOutput, need to keep
+        -- track of each gradInput of its branches uppon entry on the module,
+        -- as well as to keep track of it's own gradInput (as it's a non-trivial
+        -- operation on the childs output, contrary to nn.Sequential for
+        -- example)
+        opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+        utils.keepTrack(self.output, track, entry_fun, fun, opts)
+
+        for i,branch in ipairs(m.modules) do
+          local last_module = branch:get(branch:size())
+          local out = last_module.output
+          opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
+          utils.keepTrack(out, track, entry_fun, fun, opts)
+        end
+      end
+      --]]
+      c = c + 1
+      return basefunc(self,input,gradOutput,scale)
+    end
+
   end
   net:apply(apply_func)
-  net[func](net, input, grad)
-  local function trackInputs(t)
+  local out = net['forward'](net, input)
+  local grad
+  if mode == 'training' then
+    grad = recursiveClone(out)
+    net['backward'](net, input, grad)
+    --net['updateGradInput'](net, input, grad)
+    --net['accGradParameters'](net, input, grad)
+  end
+  local function trackInputs(t, name)
     if torch.isTensor(t) then
       local f = function(a,b) return a end
       utils.keepTrack(t, track, entry_fun, fun,
-        {var='used', c=kAlwaysLive,
-         f=f, notUsed=0, name='input'})
+      {var='used', c=kAlwaysLive,
+      f=f, notUsed=0, name=name})
       utils.keepTrack(t, track, entry_fun, fun,
-        {var='defined', c=-kAlwaysLive,
-         f=f, notUsed=0, name='input'})
+      {var='defined', c=-kAlwaysLive,
+      f=f, notUsed=0, name=name})
     else
       for k,v in ipairs(t) do
         trackInputs(v)
       end
     end
   end
-  trackInputs(input)
+  trackInputs(input,'input')
+  if grad then
+    trackInputs(grad,'grad')
+  end
   -- clean up the modified function
   net:apply(function(x)
-    x[func] = nil
+    x['updateOutput'] = nil
+    x['updateGradInput'] = nil
+    x['accGradParameters'] = nil
   end)
 
   -- disable backward pass if in evaluation mode
-  if func == 'updateOutput' then
+  if mode == 'inference' then
     net:apply(function(m)
       m.updateGradInput = function(self, input, gradInput)
         error([[Backward pass disabled!
@@ -248,23 +420,24 @@ end
 
 function optnet.optimizeMemory(net, input, opts)
   opts = opts or {}
-  local func = defaultValue(opts.func,'forward')
+  local mode = defaultValue(opts.mode,'inference')
 
+  local out = net['forward'](net, input)
   local grad
-  if func == 'backward' then
-    -- need to run forward before backward
-    grad = net['forward'](net, input)
+  if mode == 'training' then
+    grad = recursiveClone(out)
+    net['backward'](net, input, grad)
   end
-  -- do a pass over the network to initialize its fields
-  net[func](net, input, grad)
 
-  setInplace(net, opts)
-  reuseStateBuffers(net, opts)
-  removeGradParams(net, opts)
+  --setInplace(net, opts)
+  --reuseStateBuffers(net, opts)
+  --removeGradParams(net, opts)
 
   -- share outputs
-  local analysis = analyse(net, input)
+  local analysis = analyse(net, input, opts)
+  --print(analysis)
   local assignments = assign(net,analysis)
+  --print(assignments)
   applyAssignments(net, assignments)
   resetInputDescriptors(net)
 end

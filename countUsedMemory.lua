@@ -6,7 +6,7 @@ function optnet.countUsedMemory(net, input, opts)
   opts = opts or {}
   local func = opts.func or 'updateOutput'
   net[func](net, input)
-  local tensors = {outputs={},buffers={},params={}}
+  local tensors = {outputs={},buffers={},params={},gradInputs={}}
   local function entry_fun(t)
     return t
   end
@@ -15,6 +15,7 @@ function optnet.countUsedMemory(net, input, opts)
     m[func] = function(self, input)
       --keepTrack(input, tensors, entry_fun)
       keepTrack(self.output, tensors.outputs, entry_fun)
+      keepTrack(self.gradInput, tensors.gradInputs, entry_fun)
       for k, v in pairs(self) do
         if torch.isTensor(v) and
            k ~= 'weight' and k ~= 'bias' and
