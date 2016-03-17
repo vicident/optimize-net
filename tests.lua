@@ -13,28 +13,30 @@ local countUsedMemory = optnet.countUsedMemory
 local optest = torch.TestSuite()
 local tester = torch.Tester()
 
+local function resizeAndConvert(input, type)
+  local res
+  if torch.isTensor(input) then
+    local iSize = torch.Tensor(input:size():totable())[{{2,-1}}]
+    res = torch.rand(128,table.unpack(iSize:totable())):type(type)
+  else
+    res = {}
+    for k, v in ipairs(input) do
+      res[k] = resizeAndConvert(v,type)
+    end
+  end
+  return res
+end
+
+
 local function genericTestForward(model,opts)
   local net, input = models[model](opts)
   net:evaluate()
-  
+
   if use_cudnn then
     cudnn.convert(net,cudnn);
     net:cuda();
 
-    local function resizeAndConvert(input)
-      local res
-      if torch.isTensor(input) then
-        local iSize = torch.Tensor(input:size():totable())[{{2,-1}}]
-        res = torch.rand(128,table.unpack(iSize:totable())):cuda()
-      else
-        res = {}
-        for k, v in ipairs(input) do
-          res[k] = resizeAndConvert(v)
-        end
-      end
-      return res
-    end
-    input = resizeAndConvert(input)
+    input = resizeAndConvert(input,'torch.CudaTensor')
   end
 
   local out_orig = net:forward(input):clone()
@@ -67,7 +69,7 @@ local function genericTestForward(model,opts)
   print('Buffers',bmem1/1024/1024,bmem2/1024/1024, 1-bmem2/bmem1)
   print('Params', pmem1/1024/1024,pmem2/1024/1024, 1-pmem2/pmem1)
 end
---[[
+-- [[
 function optest.basic()
   genericTestForward('basic1')
 end
@@ -126,6 +128,7 @@ local function recursiveClone(out)
     for k, v in ipairs(out) do
       res[k] = recursiveClone(v)
     end
+    return res
   end
 end
 
@@ -133,6 +136,13 @@ end
 local function genericTestBackward(model,opts)
   local net, input = models[model](opts)
   net:training()
+
+  if use_cudnn then
+    cudnn.convert(net,cudnn);
+    net:cuda();
+
+    input = resizeAndConvert(input,'torch.CudaTensor')
+  end
 
   local out_orig = recursiveClone(net:forward(input))
   local grad_orig = recursiveClone(out_orig)
@@ -199,7 +209,7 @@ function optest.basic_concat_backward()
 end
 
 function optest.alexnet_backward()
-  --genericTestBackward('alexnet')
+  genericTestBackward('alexnet')
 end
 
 function optest.googlenet_backward()
