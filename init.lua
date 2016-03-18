@@ -35,7 +35,7 @@ local function analyse(net, input, opts)
   local function entry_fun(t, args)
     local ptr = torch.pointer(t:storage())
     local info = {used=kNotUsed, defined=kNotDefined,
-    name=args.name, ptr=ptr, tensor=t}
+                  name=args.name, ptr=ptr, tensor=t}
     table.insert(analysis, info)
     return info
   end
