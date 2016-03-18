@@ -7,7 +7,9 @@ Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-
 ## How does it work ?
 
 It goes over the network and verify which buffers can be reused.
-Currently, it only supports evaluation mode, but training mode will soon be included.
+It supports both evaluation mode and training mode.
+
+### Evaluation mode
 
 Here is a list of currently tested modules. Numbers are for CPU version, with batch size of 1, for **double** type, in the format
 **(total memory used, memory used for the outputs, memory used for the internal buffers, memory used for the parameters and grad parameters)**:
@@ -31,6 +33,34 @@ way more significant, specially for very deep networks like resnet. The memory u
 |vgg16 | (5340MB, 4386MB, 1014MB) | (2467MB, 1960MB, 507MB) | (54%, 55%, 50%) |
 |googlenet | (4536MB, 4390MB, 146MB) | (2066MB, 1993MB, 73MB) | (54%, 55%, 50%) |
 |resnet 110 (cifar)| (1049MB, 1036MB, 13MB) | (39MB, 32MB, 7MB) | (96%, 97%, 50%) |
+
+### Training mode
+
+We currently support a basic algorithm for training mode.
+Using `cudnn` with batch size of 64, we currently obtain the following savings, in the format **(total memory used, memory used for the outputs, memory used for the gradInputs, memory used for the parameters and gradParameters)**:
+
+| Network | before optimization | after optimization | Relative save |
+| ------- | :--------: | :-------: | :------: |
+|alexnet | (963MB, 195MB, 303MB, 462MB) | (816MB, 195MB, 156MB, 462MB) | (15%, 0%, 48%, 0%) |
+|vgg16 | (5433MB, 2191MB, 2228MB, 1014MB) | (4228MB, 2191MB, 1023MB, 1014MB) | (22%, 0%, 54%, 0%) |
+|googlenet | (6092MB, 2195MB, 3346MB, 146MB) | (4844MB, 2195MB, 2098MB, 146MB) | (20%, 0%, 37%, 0%) |
+|resnet 110 (cifar)| (664MB, 259MB, 392MB, 13MB) | (428MB, 259MB, 156MB, 13MB) | (36%, 0%, 60%, 0%) |
+
+Note that the relative save of the `gradInput` stays constant for different batch sizes, meaning that the total relative savings will be more important for bigger batch sizes (as the parameters doesn't depend on the batch size).
+
+We can setup the optimizations for training mode by using `mode='training'` as follows
+
+```lua
+models = require 'optnet.models'
+modelname = 'googlenet'
+net, input = models[modelname]()
+
+opts = {inplace=true, mode='training'}
+
+optnet = require 'optnet'
+
+optnet.optimizeMemory(net, input, opts)
+```
 
 ## Visualizing the memory reuse
 
@@ -105,15 +135,15 @@ models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
-mem1 = optnet.countUsedMemory(net, input)
+mem1 = optnet.countUsedMemory(net)
 
 optnet.optimizeMemory(net, input)
 
-mem2 = optnet.countUsedMemory(net, input)
+mem2 = optnet.countUsedMemory(net)
 
 optnet.removeOptimization(net)
 
-mem3 = optnet.countUsedMemory(net, input)
+mem3 = optnet.countUsedMemory(net)
 
 print('Before optimization        : '.. mem1.total_size/1024/1024 .. ' MBytes')
 print('After optimization         : '.. mem2.total_size/1024/1024 .. ' MBytes')
