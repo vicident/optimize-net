@@ -105,15 +105,15 @@ models = require 'optnet.models'
 modelname = 'googlenet'
 net, input = models[modelname]()
 
-mem1 = optnet.countUsedMemory(net, input)
+mem1 = optnet.countUsedMemory(net)
 
 optnet.optimizeMemory(net, input)
 
-mem2 = optnet.countUsedMemory(net, input)
+mem2 = optnet.countUsedMemory(net)
 
 optnet.removeOptimization(net)
 
-mem3 = optnet.countUsedMemory(net, input)
+mem3 = optnet.countUsedMemory(net)
 
 print('Before optimization        : '.. mem1.total_size/1024/1024 .. ' MBytes')
 print('After optimization         : '.. mem2.total_size/1024/1024 .. ' MBytes')

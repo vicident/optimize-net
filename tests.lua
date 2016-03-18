@@ -30,34 +30,9 @@ local function resizeAndConvert(input, type)
   return res
 end
 
--- what a pain... will finish later
 local function cudnnSetDeterministic(net)
-  local conv_data = 'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1'
-  local conv_weight = 'CUDNN_CONVOLUTION_BWD_DATA_ALGO_1'
-
   net:apply(function(m)
-    if torch.typename(m) == 'cudnn.SpatialConvolution' then
-      local algWorkspaceLimit = (m.nInputPlane * m.kH * m.kW * 4)
-
-      local algType_filter = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
-      local algSearchMode_data = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
-      cudnn.errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
-      cudnn.getHandle(),
-      m.iDesc[0], m.oDesc[0],
-      m.convDesc[0], m.weightDesc[0],
-      algSearchMode_data, algWorkspaceLimit, algType_filter)
-
-      local algType_data = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
-      local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
-
-      cudnn.errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
-      cudnn.getHandle(),
-      self.weightDesc[0], self.oDesc[0],
-      self.convDesc[0], self.iDesc[0],
-      algSearchMode, algWorkspaceLimit, algType_data)
-
-      m:setMode(nil, algType_filter[0], algType_data[0])
-    end
+    if m.setMode then m:setMode(1, 1, 1) end
   end)
 end
 
@@ -74,12 +49,12 @@ local function genericTestForward(model,opts)
 
   local out_orig = net:forward(input):clone()
 
-  local mems1 = optnet.countUsedMemory(net, input)
+  local mems1 = optnet.countUsedMemory(net)
 
   optnet.optimizeMemory(net, input)
 
   local out = net:forward(input):clone()
-  local mems2 = countUsedMemory(net, input)
+  local mems2 = countUsedMemory(net)
   tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
 
   local mem1 = mems1.total_size
@@ -102,7 +77,7 @@ local function genericTestForward(model,opts)
   print('Buffers',bmem1/1024/1024,bmem2/1024/1024, 1-bmem2/bmem1)
   print('Params', pmem1/1024/1024,pmem2/1024/1024, 1-pmem2/pmem1)
 end
--- [[
+
 function optest.basic()
   genericTestForward('basic1')
 end
@@ -146,7 +121,7 @@ function optest.resnet110()
   local opts = {dataset='cifar10',depth=110}
   genericTestForward('resnet', opts)
 end
---]]
+
 
 -------------------------------------------------
 -- Backward
@@ -171,10 +146,8 @@ local function genericTestBackward(model,opts)
   net:training()
 
   if use_cudnn then
-    -- for the moment disable cudnn checks, because its backward pass is
-    -- by default non-deterministic, breaking the tests
-    --cudnn.convert(net,cudnn);
-    --cudnnSetDeterministic(net)
+    cudnn.convert(net,cudnn);
+    cudnnSetDeterministic(net)
     net:cuda();
 
     input = resizeAndConvert(input,'torch.CudaTensor')
@@ -187,7 +160,7 @@ local function genericTestBackward(model,opts)
   local _, gradParams_orig = net:getParameters()
   gradParams_orig = gradParams_orig:clone()
 
-  local mems1 = optnet.countUsedMemory(net, input)
+  local mems1 = optnet.countUsedMemory(net)
 
   optnet.optimizeMemory(net, input, {mode='training'})
 
@@ -198,7 +171,7 @@ local function genericTestBackward(model,opts)
   local _, gradParams = net:getParameters()
   gradParams = gradParams:clone()
 
-  local mems2 = countUsedMemory(net, input)
+  local mems2 = countUsedMemory(net)
   tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
   tester:eq(gradInput_orig, gradInput, backward_tol, 'GradInputs differ after optimization of '..model)
   tester:eq(gradParams_orig, gradParams, backward_tol, 'GradParams differ after optimization of '..model)
@@ -271,6 +244,10 @@ function optest.resnet56_backward()
   genericTestBackward('resnet', opts)
 end
 
+function optest.resnet110_backward()
+  local opts = {dataset='cifar10',depth=110}
+  genericTestBackward('resnet', opts)
+end
 
 tester:add(optest)
 
