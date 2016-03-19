@@ -1,18 +1,11 @@
 local optnet = require 'optnet.env'
 local models = require 'optnet.models'
-
-local use_cudnn = true
-
-if use_cudnn then
-  require 'cudnn'
-  require 'cunn'
-end
-
 local countUsedMemory = optnet.countUsedMemory
 
 local optest = torch.TestSuite()
 local tester = torch.Tester()
 
+local use_cudnn = false
 local backward_tol = 1e-6
 
 local function resizeAndConvert(input, type)
@@ -29,6 +22,20 @@ local function resizeAndConvert(input, type)
   end
   return res
 end
+
+-- reuse this function
+local function recursiveClone(out)
+  if torch.isTensor(out) then
+    return out:clone()
+  else
+    local res = {}
+    for k, v in ipairs(out) do
+      res[k] = recursiveClone(v)
+    end
+    return res
+  end
+end
+
 
 local function cudnnSetDeterministic(net)
   net:apply(function(m)
@@ -47,13 +54,13 @@ local function genericTestForward(model,opts)
     input = resizeAndConvert(input,'torch.CudaTensor')
   end
 
-  local out_orig = net:forward(input):clone()
+  local out_orig = recursiveClone(net:forward(input))
 
   local mems1 = optnet.countUsedMemory(net)
 
   optnet.optimizeMemory(net, input)
 
-  local out = net:forward(input):clone()
+  local out = recursiveClone(net:forward(input))
   local mems2 = countUsedMemory(net)
   tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
 
@@ -78,68 +85,9 @@ local function genericTestForward(model,opts)
   print('Params', pmem1/1024/1024,pmem2/1024/1024, 1-pmem2/pmem1)
 end
 
-function optest.basic()
-  genericTestForward('basic1')
-end
-
-function optest.basic_conv()
-  genericTestForward('basic2')
-end
-
-function optest.basic_concat()
-  genericTestForward('basic_concat')
-end
-
-function optest.alexnet()
-  genericTestForward('alexnet')
-end
-
-function optest.googlenet()
-  genericTestForward('googlenet')
-end
-
-function optest.vgg()
-  genericTestForward('vgg')
-end
-
-function optest.resnet20()
-  local opts = {dataset='cifar10',depth=20}
-  genericTestForward('resnet', opts)
-end
-
-function optest.resnet32()
-  local opts = {dataset='cifar10',depth=32}
-  genericTestForward('resnet', opts)
-end
-
-function optest.resnet56()
-  local opts = {dataset='cifar10',depth=56}
-  genericTestForward('resnet', opts)
-end
-
-function optest.resnet110()
-  local opts = {dataset='cifar10',depth=110}
-  genericTestForward('resnet', opts)
-end
-
-
 -------------------------------------------------
 -- Backward
 -------------------------------------------------
-
--- reuse this function
-local function recursiveClone(out)
-  if torch.isTensor(out) then
-    return out:clone()
-  else
-    local res = {}
-    for k, v in ipairs(out) do
-      res[k] = recursiveClone(v)
-    end
-    return res
-  end
-end
-
 
 local function genericTestBackward(model,opts)
   local net, input = models[model](opts)
@@ -201,57 +149,99 @@ local function genericTestBackward(model,opts)
   print('Params', pmem1/1024/1024,pmem2/1024/1024, 1-pmem2/pmem1)
 end
 
-function optest.basic_backward()
-  genericTestBackward('basic1')
+-------------------------------------------------
+-- removing optimization
+-------------------------------------------------
+
+local function genericTestRemoveOptim(model,opts)
+  local net, input = models[model](opts)
+  net:training()
+
+  if use_cudnn then
+    cudnn.convert(net,cudnn);
+    cudnnSetDeterministic(net)
+    net:cuda();
+
+    input = resizeAndConvert(input,'torch.CudaTensor')
+  end
+
+  local out_orig = recursiveClone(net:forward(input))
+  local grad_orig = recursiveClone(out_orig)
+  net:zeroGradParameters()
+  local gradInput_orig = recursiveClone(net:backward(input, grad_orig))
+  local _, gradParams_orig = net:getParameters()
+  gradParams_orig = gradParams_orig:clone()
+
+  optnet.optimizeMemory(net, input)
+  optnet.removeOptimization(net)
+
+  local out = recursiveClone(net:forward(input))
+  local grad = recursiveClone(out)
+  net:zeroGradParameters()
+  local gradInput = recursiveClone(net:backward(input, grad))
+  local _, gradParams = net:getParameters()
+  gradParams = gradParams:clone()
+
+  tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
+  tester:eq(gradInput_orig, gradInput, backward_tol, 'GradInputs differ after optimization of '..model)
+  tester:eq(gradParams_orig, gradParams, backward_tol, 'GradParams differ after optimization of '..model)
 end
 
-function optest.basic_conv_backward()
-  genericTestBackward('basic2')
+for k, v in pairs(models) do
+  if k ~= 'resnet' then
+    optest[k] = function()
+      genericTestForward(k)
+    end
+    optest[k..'_backward'] = function()
+      genericTestBackward(k)
+    end
+    optest[k..'_remove'] = function()
+      genericTestRemoveOptim(k)
+    end
+  end
 end
 
-function optest.basic_conv2_backward()
-  genericTestBackward('basic3')
-end
-
-function optest.basic_concat_backward()
-  genericTestBackward('basic_concat')
-end
-
-function optest.alexnet_backward()
-  genericTestBackward('alexnet')
-end
-
-function optest.vgg_backward()
-  genericTestBackward('vgg')
-end
-
-function optest.googlenet_backward()
-  genericTestBackward('googlenet')
-end
-
-function optest.resnet20_backward()
-  local opts = {dataset='cifar10',depth=20}
-  genericTestBackward('resnet', opts)
-end
-
-function optest.resnet32_backward()
-  local opts = {dataset='cifar10',depth=32}
-  genericTestBackward('resnet', opts)
-end
-
-function optest.resnet56_backward()
-  local opts = {dataset='cifar10',depth=56}
-  genericTestBackward('resnet', opts)
-end
-
-function optest.resnet110_backward()
-  local opts = {dataset='cifar10',depth=110}
-  genericTestBackward('resnet', opts)
+for _, v in ipairs({20,32,56,110}) do
+  local k = 'resnet'
+  local opts = {dataset='cifar10',depth=v}
+  optest[k..v] = function()
+    genericTestForward(k, opts)
+  end
+  optest[k..v..'_backward'] = function()
+    genericTestBackward(k, opts)
+  end
+  optest[k..v..'_remove'] = function()
+    genericTestRemoveOptim(k, opts)
+  end
 end
 
 tester:add(optest)
 
-function optnet.test(tests)
+function optnet.test(tests, opts)
+  opts = opts or {}
+
+  local tType = torch.getdefaulttensortype()
+  torch.setdefaulttensortype('torch.FloatTensor')
+
+  if opts.only_basic_tests then
+    local disable = {
+      'alexnet','vgg','googlenet',
+      'resnet20','resnet32','resnet56','resnet110'
+    }
+    local toDisable = {}
+    for _, v in ipairs(disable) do
+      table.insert(toDisable,v)
+      table.insert(toDisable,v..'_backward')
+      table.insert(toDisable,v..'_remove')
+    end
+    tester:disable(toDisable)
+  end
+  if opts.use_cudnn then
+    use_cudnn = true
+    require 'cudnn'
+    require 'cunn'
+  end
   tester:run(tests)
+  torch.setdefaulttensortype(tType)
   return tester
 end

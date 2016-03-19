@@ -1,7 +1,7 @@
 require 'nn'
 
 local models = {}
-models.basic1 = function()
+models.basic_parallel = function()
   local m = nn.Sequential()
   local prl = nn.ParallelTable()
   prl:add(nn.Linear(2,2))
@@ -14,7 +14,7 @@ models.basic1 = function()
   local input = {torch.rand(2,2), torch.rand(2,2)}
   return m, input
 end
-models.basic2 = function()
+models.basic_conv = function()
   local m = nn.Sequential()
   m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
   --  m:add(nn.ReLU(true))
@@ -28,7 +28,7 @@ models.basic2 = function()
   return m, input
 end
 
-models.basic3 = function()
+models.basic_deep_conv = function()
   local inplace = true
   local m = nn.Sequential()
   m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
@@ -44,6 +44,31 @@ models.basic3 = function()
   m:add(nn.ReLU(inplace))
   m:add(nn.Linear(100,10))
   local input = torch.rand(1,1,32,32)
+  return m, input
+end
+
+models.siamese = function()
+  local inplace = false
+  local b1 = nn.Sequential()
+  b1:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  b1:add(nn.ReLU(inplace))
+  b1:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  b1:add(nn.ReLU(inplace))
+  b1:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  b1:add(nn.ReLU(inplace))
+  b1:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  b1:add(nn.ReLU(inplace))
+  b1:add(nn.View(-1):setNumInputDims(3))
+
+  local b2 = b1:clone('weight','bias','gradWeight','gradBias')
+  local prl = nn.ParallelTable()
+  prl:add(b1)
+  prl:add(b2)
+
+  m = nn.Sequential()
+  m:add(prl)
+  m:add(nn.PairwiseDistance(2))
+  local input = {torch.rand(1,1,32,32), torch.rand(1,1,32,32)}
   return m, input
 end
 

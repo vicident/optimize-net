@@ -308,28 +308,50 @@ local function resetInputDescriptors(net)
 end
 
 -- need to keep a list of shared gradParams
+-- to avoid problems when removing the optimization
 local function removeGradParams(net, opts)
   local removeGradParams = defaultValue(opts.removeGradParams, true)
   local mode = defaultValue(opts.mode, 'inference')
   if not removeGradParams then return end
   if mode == 'training' then return end
+  local storages = {}
   net:apply(function(m)
     for _, k in ipairs({'gradWeight','gradBias'}) do
-      if m[k] then
+      if m[k] and m[k]:storage() then
+        local strPtr = torch.pointer(m[k]:storage())
+        local strOffset = m[k]:storageOffset()
+        local strSize = m[k]:storage():size()
+        local tPtr = torch.pointer(m[k])
+        storages[tPtr] = {storage=strPtr, offSet=strOffset,
+                          size=strSize, stride=m[k]:stride()}
         m[k]:set()
       end
     end
   end)
+  net.__gradParamsInfo = storages
 end
 
 local function addGradParams(net)
+  local storages = net.__gradParamsInfo
+  local createdStorages = {}
   net:apply(function(m)
     for k, v in pairs({weight='gradWeight',bias='gradBias'}) do
       if m[v] then
-        m[v]:resizeAs(m[k])
+        local tPtr = torch.pointer(m[v])
+        local info = storages[tPtr]
+        if not createdStorages[info.storage] then
+          local strSize = info.size
+          createdStorages[info.storage] = m[v].new(strSize):storage()
+        end
+        local storage = createdStorages[info.storage]
+        local tSize = m[k]:size()
+        local tStride = info.stride
+        local tOffset = info.offSet
+        m[v]:set(storage, tOffset, tSize, tStride)
       end
     end
   end)
+  net.__gradParamsInfo = nil
 end
 
 
@@ -381,12 +403,11 @@ function optnet.removeOptimization(net)
         end
       end
     end
-
-    resetInputDescriptors(net)
-    addGradParams(net)
     -- remove backward blocking
     m.updateGradInput = nil
   end)
+  resetInputDescriptors(net)
+  addGradParams(net)
 end
 
 return optnet
