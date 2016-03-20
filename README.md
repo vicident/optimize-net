@@ -86,7 +86,16 @@ net, input = models[modelname]()
 
 generateGraph = require 'optnet.graphgen'
 
-g = generateGraph(net, input)
+-- visual properties of the generated graph
+-- follows graphviz attributes
+graphOpts = {
+displayProps =  {shape='ellipse',fontsize=14, style='solid'},
+nodeData = function(oldData, tensor)
+  return oldData .. '\n' .. 'Size: '.. tensor:numel()
+end
+}
+
+g = generateGraph(net, input, graphOpts)
 
 graph.dot(g,modelname,modelname)
 ```
@@ -111,7 +120,14 @@ optnet = require 'optnet'
 
 optnet.optimizeMemory(net, input, opts)
 
-g = generateGraph(net, input)
+graphOpts = {
+displayProps =  {shape='ellipse',fontsize=14, style='solid'},
+nodeData = function(oldData, tensor)
+  return oldData .. '\n' .. 'Size: '.. tensor:numel()
+end
+}
+
+g = generateGraph(net, input, graphOpts)
 
 graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 ```
@@ -121,8 +137,9 @@ graph.dot(g,modelname..'_optimized',modelname..'_optimized')
 
 We can also provide a function to compute the amount of memory used by the network
 in bytes, which allows us to check the amount of saved memory.
-It decomposes the total amount of memory in three fields:
+It decomposes the total amount of memory in four fields:
 * total memory used by the outputs of each module
+* total memory used by the gradInputs of each module
 * total memory used by the internal buffers of each module
 * total memory used by the weights and gradWeights of each module.
 

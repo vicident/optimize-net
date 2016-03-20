@@ -6,7 +6,7 @@ local colorNames = {
   "antiquewhite4","aquamarine","aquamarine1","aquamarine2","aquamarine3",
   "aquamarine4","azure","azure1","azure2","azure3",
   "azure4","beige","bisque","bisque1","bisque2",
-  "bisque3","bisque4","blanchedalmond","blue",
+  "bisque3","bisque4","black","blanchedalmond","blue",
   "blue1","blue2","blue3","blue4","blueviolet",
   "brown","brown1","brown2","brown3","brown4",
   "burlywood","burlywood1","burlywood2","burlywood3","burlywood4",
@@ -35,6 +35,7 @@ local colorNames = {
 
 
 local function generateGraph(net, input, opts)
+  opts = opts or {}
 
   local storageHash = {}
   local nodes = {}
@@ -57,17 +58,27 @@ local function generateGraph(net, input, opts)
         storageId = k
       end
     end
-    local node = graph.Node("Storage id: "..storageId)
+    local nodeData = 'Storage id: '..storageId
+    if opts.nodeData then
+      nodeData = opts.nodeData(nodeData, tensor)
+    end
+    local node = graph.Node(nodeData)
     function node:graphNodeName()
       return name
     end
     function node:graphNodeAttributes()
-      return {
+      local prop = {
          color=colorNames[storageHash[data]], 
          style = 'filled',
          shape = 'box',
          fontsize = 10,
       }
+      if opts.displayProps then
+        for k, v in pairs(opts.displayProps) do
+          prop[k] = v
+        end
+      end
+      return prop
     end
     return node
   end
