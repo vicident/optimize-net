@@ -33,6 +33,27 @@ local colorNames = {
   "goldenrod","goldenrod1","goldenrod2","goldenrod3","goldenrod4"
 }
 
+-- some modules exist only for constructing
+-- the flow of information, and should not
+-- have their place in the computation graph
+-- as separate entities
+local function isSingleOperationModule(m)
+  if m.modules then
+    return false
+  end
+  local constructorModules = {
+    'nn.Identity',
+    'nn.SelectTable',
+    'nn.NarrowTable'
+  }
+  local mType = torch.typename(m)
+  for _, v in ipairs(constructorModules) do
+    if mType == v then
+      return false
+    end
+  end
+  return true
+end
 
 local function generateGraph(net, input, opts)
   opts = opts or {}
@@ -90,7 +111,7 @@ local function generateGraph(net, input, opts)
       nodes[ptr] = createNode(name,input)
     else
       for k,v in ipairs(input) do
-        createBoundaryNode(nodes, v, name..' '..k)
+        createBoundaryNode(v, name..' '..k)
       end
     end
   end
@@ -104,12 +125,11 @@ local function generateGraph(net, input, opts)
       local toPtr = torch.pointer(to)
 
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
-      
+
       assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
       
       -- insert edge
       g:add(graph.Edge(nodes[fromPtr],nodes[toPtr]))
-      
     elseif torch.isTensor(from) then
       for k,v in ipairs(to) do
         addEdge(from, v, name)
@@ -126,7 +146,7 @@ local function generateGraph(net, input, opts)
   local function apply_func(m)
     local basefunc = m.updateOutput
     m.updateOutput = function(self, input)
-      if not m.modules then
+      if isSingleOperationModule(m) then
         local name = tostring(m)
         if m.inplace then -- handle it differently ?
           addEdge(input,self.output,name)
