@@ -44,7 +44,8 @@ local function isSingleOperationModule(m)
   local constructorModules = {
     'nn.Identity',
     'nn.SelectTable',
-    'nn.NarrowTable'
+    'nn.NarrowTable',
+    'nn.FlattenTable'
   }
   local mType = torch.typename(m)
   for _, v in ipairs(constructorModules) do
