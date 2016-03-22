@@ -1,5 +1,6 @@
 local optnet = require 'optnet.env'
 local models = require 'optnet.models'
+local utils = require 'optnet.utils'
 local countUsedMemory = optnet.countUsedMemory
 
 local optest = torch.TestSuite()
@@ -23,20 +24,6 @@ local function resizeAndConvert(input, type)
   return res
 end
 
--- reuse this function
-local function recursiveClone(out)
-  if torch.isTensor(out) then
-    return out:clone()
-  else
-    local res = {}
-    for k, v in ipairs(out) do
-      res[k] = recursiveClone(v)
-    end
-    return res
-  end
-end
-
-
 local function cudnnSetDeterministic(net)
   net:apply(function(m)
     if m.setMode then m:setMode(1, 1, 1) end
@@ -54,13 +41,13 @@ local function genericTestForward(model,opts)
     input = resizeAndConvert(input,'torch.CudaTensor')
   end
 
-  local out_orig = recursiveClone(net:forward(input))
+  local out_orig = utils.recursiveClone(net:forward(input))
 
   local mems1 = optnet.countUsedMemory(net)
 
   optnet.optimizeMemory(net, input)
 
-  local out = recursiveClone(net:forward(input))
+  local out = utils.recursiveClone(net:forward(input))
   local mems2 = countUsedMemory(net)
   tester:eq(out_orig, out, 'Outputs differ after optimization of '..model)
 
@@ -101,10 +88,10 @@ local function genericTestBackward(model,opts)
     input = resizeAndConvert(input,'torch.CudaTensor')
   end
 
-  local out_orig = recursiveClone(net:forward(input))
-  local grad_orig = recursiveClone(out_orig)
+  local out_orig = utils.recursiveClone(net:forward(input))
+  local grad_orig = utils.recursiveClone(out_orig)
   net:zeroGradParameters()
-  local gradInput_orig = recursiveClone(net:backward(input, grad_orig))
+  local gradInput_orig = utils.recursiveClone(net:backward(input, grad_orig))
   local _, gradParams_orig = net:getParameters()
   gradParams_orig = gradParams_orig:clone()
 
@@ -112,10 +99,10 @@ local function genericTestBackward(model,opts)
 
   optnet.optimizeMemory(net, input, {mode='training'})
 
-  local out = recursiveClone(net:forward(input))
-  local grad = recursiveClone(out)
+  local out = utils.recursiveClone(net:forward(input))
+  local grad = utils.recursiveClone(out)
   net:zeroGradParameters()
-  local gradInput = recursiveClone(net:backward(input, grad))
+  local gradInput = utils.recursiveClone(net:backward(input, grad))
   local _, gradParams = net:getParameters()
   gradParams = gradParams:clone()
 
@@ -165,20 +152,20 @@ local function genericTestRemoveOptim(model,opts)
     input = resizeAndConvert(input,'torch.CudaTensor')
   end
 
-  local out_orig = recursiveClone(net:forward(input))
-  local grad_orig = recursiveClone(out_orig)
+  local out_orig = utils.recursiveClone(net:forward(input))
+  local grad_orig = utils.recursiveClone(out_orig)
   net:zeroGradParameters()
-  local gradInput_orig = recursiveClone(net:backward(input, grad_orig))
+  local gradInput_orig = utils.recursiveClone(net:backward(input, grad_orig))
   local _, gradParams_orig = net:getParameters()
   gradParams_orig = gradParams_orig:clone()
 
   optnet.optimizeMemory(net, input)
   optnet.removeOptimization(net)
 
-  local out = recursiveClone(net:forward(input))
-  local grad = recursiveClone(out)
+  local out = utils.recursiveClone(net:forward(input))
+  local grad = utils.recursiveClone(out)
   net:zeroGradParameters()
-  local gradInput = recursiveClone(net:backward(input, grad))
+  local gradInput = utils.recursiveClone(net:backward(input, grad))
   local _, gradParams = net:getParameters()
   gradParams = gradParams:clone()
 

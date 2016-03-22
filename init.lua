@@ -6,20 +6,6 @@ require 'optnet.tests'
 
 local utils = require 'optnet.utils'
 
-local function recursiveClone(out)
-  if torch.isTensor(out) then
-    return out:clone()
-  else
-    local res = {}
-    for k, v in ipairs(out) do
-      res[k] = recursiveClone(v)
-    end
-    return res
-  end
-end
-
-
-
 local kNotUsed = 10000---1
 local kNotDefined = 0
 local kMinimumForSharing = 2
@@ -147,7 +133,7 @@ local function analyse(net, input, opts)
   local out = net['forward'](net, input)
   local grad
   if mode == 'training' then
-    grad = recursiveClone(out)
+    grad = utils.recursiveClone(out)
     net['backward'](net, input, grad)
   end
   local function trackInputs(t, name)
@@ -362,7 +348,7 @@ function optnet.optimizeMemory(net, input, opts)
   local out = net['forward'](net, input)
   local grad
   if mode == 'training' then
-    grad = recursiveClone(out)
+    grad = utils.recursiveClone(out)
     net['backward'](net, input, grad)
   end
 

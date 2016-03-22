@@ -19,4 +19,17 @@ local function keepTrack(t, track, entry_fun, fun, ...)
 end
 utils.keepTrack = keepTrack
 
+local function recursiveClone(out)
+  if torch.isTensor(out) then
+    return out:clone()
+  else
+    local res = {}
+    for k, v in ipairs(out) do
+      res[k] = recursiveClone(v)
+    end
+    return res
+  end
+end
+utils.recursiveClone = recursiveClone
+
 return utils
