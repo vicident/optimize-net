@@ -210,6 +210,39 @@ local function assign(net, analysis)
   return assignments
 end
 
+local function assign2(net, analysis)
+  table.sort(analysis, function(a,b)
+    local x = a.used
+    local y = b.used
+    return x < y
+  end)
+  local assignments = {}
+  for _,candidate in ipairs(analysis) do
+    local assigned = false
+    local bestAssignment = 0
+    local minDist = math.huge
+    local candidateSize = candidate.tensor:numel()
+    for idx, assignment in ipairs(assignments) do
+      if isCompatible(candidate, assignment) then
+        assigned = true
+        local dist = math.abs(assignment.maxSize-candidateSize)
+        if dist < minDist then
+          minDist = dist
+          bestAssignment = idx
+        end
+      end
+    end
+    if assigned then
+      local assignment = assignments[bestAssignment]
+      table.insert(assignment,candidate)
+      assignment.maxSize = math.max(assignment.maxSize, candidateSize)
+    else
+      table.insert(assignments, {candidate, maxSize=candidateSize})
+    end
+  end
+  return assignments
+end
+
 local function applyAssignments(net, assignments)
   for _, assignment in ipairs(assignments) do
     local storage
@@ -359,7 +392,8 @@ function optnet.optimizeMemory(net, input, opts)
   -- share outputs
   local analysis = analyse(net, input, opts)
   --print(analysis)
-  local assignments = assign(net,analysis)
+  --local assignments = assign(net,analysis)
+  local assignments = assign2(net,analysis)
   --print(assignments)
   applyAssignments(net, assignments)
   resetInputDescriptors(net)
