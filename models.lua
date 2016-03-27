@@ -95,6 +95,25 @@ models.basic_concat = function()
 
 end
 
+models.basic_multiOutput = function()
+  local m = nn.Sequential()
+  m:add(nn.Linear(2,2))
+  m:add(nn.ReLU())
+  m:add(nn.Linear(2,2))
+  m:add(nn.ReLU())
+  m:add(nn.Linear(2,2))
+  m:add(nn.ReLU())
+  local p = nn.ConcatTable()
+  p:add(nn.Linear(2,2))
+  p:add(nn.Linear(2,2))
+  p:add(nn.Linear(2,2))
+
+  m:add(p)
+
+  local input = torch.rand(2,2)
+  return m, input
+end
+
 models.alexnet = function()
   -- taken from soumith's imagenet-multiGPU
   -- https://github.com/soumith/imagenet-multiGPU.torch/blob/master/models/alexnet.lua

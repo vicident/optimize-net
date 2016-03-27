@@ -1,4 +1,5 @@
 require 'graph'
+local utils = require 'optnet.utils'
 
 -- taken from http://www.graphviz.org/doc/info/colors.html
 local colorNames = {
@@ -56,6 +57,18 @@ local function isSingleOperationModule(m)
   return true
 end
 
+-- generates a graph from a nn network
+-- Arguments:
+-- net: nn network
+-- input: input to the network
+-- opts: table with options for the graph generation. Options are
+--     nodeData: function that takes the string with storage id plus
+--               the tensor output from the module and outputs a
+--               string which will be displayed in the graph
+--     displayProps: display options from graphviz, like color, fontsize,
+--               style, etc
+--     addOutputNode: insert a dummy output node in the generated graph
+-- returns a graph representing the network
 local function generateGraph(net, input, opts)
   opts = opts or {}
 
@@ -178,12 +191,30 @@ local function generateGraph(net, input, opts)
   -- fill the states from each tensor
   net:forward(input)
   
-  --createInputNode(nodes, net.output, 'Output')
-  
   -- overwriting the standard functions to generate our graph
   net:apply(apply_func)
   -- generate the graph
   net:forward(input)
+
+  if opts.addOutputNode then
+    -- add dummy output node and link the last module to it
+    local output = utils.recursiveClone(net.output)
+    createBoundaryNode(output, 'Output')
+    local function addOutputEdge(lastModule, output)
+      if torch.isTensor(lastModule) then
+        local fromPtr = torch.pointer(lastModule)
+        local toPtr = torch.pointer(output)
+        -- insert edge
+        g:add(graph.Edge(nodes[fromPtr],nodes[toPtr]))
+
+      else
+        for k,v in ipairs(lastModule) do
+          addOutputEdge(v, output[k])
+        end
+      end
+    end
+    addOutputEdge(net.output, output)
+  end
 
   -- clean up the modified function
   net:apply(function(x)
