@@ -2,13 +2,13 @@ package = "optnet"
 version = "scm-1"
 
 source = {
-   url = "git://github.com/fmassa/optnet",
+   url = "git://github.com/fmassa/optimize-net",
    tag = "master"
 }
 
 description = {
    summary = "This package provides memory optimizations for nn library in Torch7.",
-   homepage = "git://github.com/fmassa/optnet",
+   homepage = "git://github.com/fmassa/optimize-net",
    license = "BSD"
 }
 
