@@ -67,7 +67,13 @@ local function analyse(net, input, opts)
           utils.keepTrack(self.output, track, entry_fun, fun, opts)
 
           for i,branch in ipairs(m.modules) do
-            local last_module = branch:get(branch:size())
+            local last_module
+            -- if brach is a container, get its last element, if not, take it
+            if branch.modules then
+              last_module = branch:get(branch:size())
+            else
+              last_module = branch
+            end
             local out = last_module.output
             opts.var = 'defined'; opts.f = math.min; opts.notUsed = kNotDefined
             utils.keepTrack(out, track, entry_fun, fun, opts)
@@ -343,6 +349,13 @@ end
 
 function optnet.optimizeMemory(net, input, opts)
   opts = opts or {}
+
+  if net.__memoryOptimized then
+    print('Skipping memory optimization. '..
+          'Network is already optimized for '..net.__memoryOptimized..' mode.')
+    return
+  end
+
   local mode = defaultValue(opts.mode,'inference')
 
   local out = net['forward'](net, input)
@@ -363,9 +376,18 @@ function optnet.optimizeMemory(net, input, opts)
   --print(assignments)
   applyAssignments(net, assignments)
   resetInputDescriptors(net)
+
+  -- add flag to mention that it was optimized
+  net.__memoryOptimized = mode
 end
 
 function optnet.removeOptimization(net)
+
+  if not net.__memoryOptimized then
+    print('Skipping memory optimization removal, as the network was not optimized.')
+    return
+  end
+
   local function rem(m)
     if torch.isTensor(m) then
       m:set()
@@ -394,6 +416,8 @@ function optnet.removeOptimization(net)
   end)
   resetInputDescriptors(net)
   addGradParams(net)
+
+  net.__memoryOptimized = nil
 end
 
 return optnet
