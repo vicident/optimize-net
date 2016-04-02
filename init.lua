@@ -319,6 +319,12 @@ local function removeGradParams(net, opts)
         m[k]:set()
       end
     end
+    -- disabling getParameters
+    m.getParameters = function(self)
+      error('getParameters was disabled by optnet '..
+            '(by option removeGradParams=true). '..
+            'Call optnet.removeOptimization(net) to enable it back.')
+    end
   end)
   net.__gradParamsInfo = storages
 end
@@ -342,6 +348,8 @@ local function addGradParams(net)
         m[v]:set(storage, tOffset, tSize, tStride)
       end
     end
+    -- add back original getParameters
+    m.getParameters = nil
   end)
   net.__gradParamsInfo = nil
 end
