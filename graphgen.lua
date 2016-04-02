@@ -102,6 +102,7 @@ local function generateGraph(net, input, opts)
 
   local storageHash = {}
   local nodes = {}
+  local trickyNodes = {}
 
   local g = graph.Graph()
 
@@ -168,7 +169,17 @@ local function generateGraph(net, input, opts)
 
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
 
-      assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
+      --assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
+      if not nodes[fromPtr] then
+        --[[
+        print('Printing debug')
+        print(debug.getinfo(2))
+        --]]
+
+        nodes[fromPtr] = createNode('oups',from)
+        table.insert(trickyNodes, fromPtr)
+        trickyNodes[fromPtr] = nodes[fromPtr]
+      end
       
       -- insert edge
       g:add(graph.Edge(nodes[fromPtr],nodes[toPtr]))
@@ -199,7 +210,14 @@ local function generateGraph(net, input, opts)
         -- those containers effectively do some computation, so they have their
         -- place in the graph
         for i,branch in ipairs(m.modules) do
-          local last_module = branch:get(branch:size())
+          --local last_module = branch:get(branch:size())
+          local last_module
+          if branch.modues then
+            last_module = branch:get(#branch.modules)
+          else
+            last_module = branch
+          end
+
           local out = last_module.output
           local ptr = torch.pointer(out)
 

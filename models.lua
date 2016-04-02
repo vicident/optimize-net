@@ -72,6 +72,62 @@ models.siamese = function()
   return m, input
 end
 
+models.siamese_parallel = function()
+  local fSize = {1, 32, 64}
+  local featuresOut = 128
+
+  local desc = nn.Sequential()
+  desc:add(nn.Reshape(1,64,64))
+  desc:add(nn.SpatialAveragePooling(2,2,2,2))
+  desc:add(nn.SpatialConvolution(fSize[1], fSize[2], 7,7))
+  desc:add(nn.ReLU())
+  desc:add(nn.SpatialMaxPooling(2,2,2,2))
+  desc:add(nn.SpatialConvolution(fSize[2], fSize[3], 6,6))
+  desc:add(nn.ReLU())
+  desc:add(nn.View(-1):setNumInputDims(3))
+  desc:add(nn.Linear(4096, 128))
+  desc:add(nn.Contiguous())
+
+  local siamese = nn.Parallel(2,2)
+  local siam = desc:clone()
+  desc:share(siam, 'weight', 'bias', 'gradWeight', 'gradBias')
+  siamese:add(desc)
+  siamese:add(siam)
+
+  local top = nn.Sequential()
+  top:add(nn.Linear(featuresOut*2, featuresOut*2))
+  top:add(nn.ReLU())
+  top:add(nn.Linear(featuresOut*2, 1))
+
+  local model = nn.Sequential():add(siamese):add(top)
+
+  local input = torch.rand(1,2,64,64)
+
+  return model, input
+end
+
+models.basic_parallel_middle = function()
+  local model = nn.Sequential():add(nn.Linear(2,2))
+  local prl = nn.Parallel(2,1)
+  prl:add(nn.Linear(2,2))
+  prl:add(nn.Linear(2,2))
+  model:add(prl)
+  local input = torch.rand(2,2)
+  return model, input
+end
+
+models.basic_splitTable = function()
+  local model = nn.Sequential():add(nn.Linear(2,2))
+  model:add(nn.SplitTable(2))
+  local prl = nn.ParallelTable()
+  prl:add(nn.ReLU())
+  prl:add(nn.Sigmoid())
+  model:add(prl)
+  model:add(nn.JoinTable(1))
+  local input = torch.rand(2,2)
+  return model, input
+end
+
 models.basic_concat = function()
   local m = nn.Sequential()
   local cat = nn.ConcatTable()
