@@ -34,6 +34,7 @@ local colorNames = {
   "goldenrod","goldenrod1","goldenrod2","goldenrod3","goldenrod4"
 }
 
+
 -- some modules exist only for constructing
 -- the flow of information, and should not
 -- have their place in the computation graph
@@ -159,6 +160,32 @@ local function generateGraph(net, input, opts)
     end
   end
 
+  --local oldFuncs = {DoubleTensor={},FloatTensor={}}
+  local oldF
+  local idx = 1
+
+  local function hackTorch()
+    --oldFuncs.DoubleTensor.__index = torch.DoubleTensor.__index
+    oldF = torch.DoubleTensor.__index
+    torch.DoubleTensor.__index = function(...)
+      local r = oldF(...)
+      trickyNodes[torch.pointer(r)] = idx
+      idx = idx+1
+      return r
+    end
+  end
+
+  local function unhackTorch()
+    torch.DoubleTensor.__index = oldF
+  end
+
+  local m_idx = {}
+  net:apply(function(x)
+    table.insert(m_idx, x)
+  end)
+
+
+
   -- create edge "from" -> "to", creating "to" on the way with "name"
   -- the edges can be seen as linking modules, but in fact it links the output
   -- tensor of each module
@@ -175,12 +202,16 @@ local function generateGraph(net, input, opts)
         print('Printing debug')
         print(debug.getinfo(2))
         --]]
+        local n = trickyNodes[fromPtr]
+        print(n)
+        local n2 = torch.typename(m_idx[n])
 
-        nodes[fromPtr] = createNode('oups',from)
-        table.insert(trickyNodes, fromPtr)
-        trickyNodes[fromPtr] = nodes[fromPtr]
+        nodes[fromPtr] = createNode(n2,from)
+        --nodes[fromPtr] = createNode('oups',from)
+        --table.insert(trickyNodes, fromPtr)
+        --trickyNodes[fromPtr] = nodes[fromPtr]
       end
-      
+
       -- insert edge
       g:add(graph.Edge(nodes[fromPtr],nodes[toPtr]))
     elseif torch.isTensor(from) then
@@ -234,11 +265,13 @@ local function generateGraph(net, input, opts)
 
   -- fill the states from each tensor
   net:forward(input)
-  
+
   -- overwriting the standard functions to generate our graph
   net:apply(apply_func)
   -- generate the graph
+  hackTorch()
   net:forward(input)
+  unhackTorch()
 
   if opts.addOutputNode then
     -- add dummy output node and link the last module to it
