@@ -331,6 +331,7 @@ end
 
 local function addGradParams(net)
   local storages = net.__gradParamsInfo
+  if not storages then return end
   local createdStorages = {}
   net:apply(function(m)
     for k, v in pairs({weight='gradWeight',bias='gradBias'}) do
