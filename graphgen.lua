@@ -57,6 +57,34 @@ local function isSingleOperationModule(m)
   return true
 end
 
+local function isOperativeContainer(m)
+  local mType = torch.typename(m)
+
+  local opContainers = {
+    'nn.Concat',
+    'nn.Parallel',
+    'nn.DepthConcat'
+  }
+  for _, v in ipairs(opContainers) do
+    if mType == v then
+      return true
+    end
+  end
+
+  -- those modules heritate from an
+  -- operative container like nn.Concat
+  local fakeContainers = {
+    'inn.SpatialPyramidPooling',
+  }
+  for _, v in ipairs(fakeContainers) do
+    if mType == v then
+      return true
+    end
+  end
+
+  return false
+end
+
 -- generates a graph from a nn network
 -- Arguments:
 -- net: nn network
@@ -167,9 +195,7 @@ local function generateGraph(net, input, opts)
         else
           addEdge(input,self.output,name)
         end
-      elseif torch.typename(m) == 'nn.Concat' or 
-        torch.typename(m) == 'nn.Parallel' or 
-        torch.typename(m) == 'nn.DepthConcat' then
+      elseif isOperativeContainer(m) then
         -- those containers effectively do some computation, so they have their
         -- place in the graph
         for i,branch in ipairs(m.modules) do
