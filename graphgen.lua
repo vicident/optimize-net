@@ -160,28 +160,35 @@ local function generateGraph(net, input, opts)
     end
   end
 
-  --local oldFuncs = {DoubleTensor={},FloatTensor={}}
-  local origTorchFuncs = {DoubleTensor={},FloatTensor={},CudaTensor={}}
+  local origTorchFuncs = {DoubleTensor={},FloatTensor={}}
+  if package.loaded.cutorch then
+    origTorchFuncs.CudaTensor = {}
+  end
   local hackableTorchFuncs = {'select'}
-  local oldF
-  local idx_m = {__input=input}
+  local current_module = {__input=input}
 
   local function hackTorch()
-    --oldFuncs.DoubleTensor.__index = torch.DoubleTensor.__index
-    --oldF = torch.DoubleTensor.__index
-    oldF = torch.DoubleTensor.select
-    --torch.DoubleTensor.__index = function(...)
-    torch.DoubleTensor.select = function(...)
-      local r = oldF(...)
-      if r then
-        trickyNodes[torch.pointer(r)] = {idx_m,'select'}
+    for torchType, t in pairs(origTorchFuncs) do
+      for _, func in ipairs(hackableTorchFuncs) do
+        oldFunc = torch[torchType][func]
+        t[func] = oldFunc
+        torch[torchType][func] = function(...)
+          local res = oldFunc(...)
+          if res then
+            trickyNodes[torch.pointer(res)] = {current_module, 'torch.'..func}
+          end
+          return res
+        end
       end
-      return r
     end
   end
 
   local function unhackTorch()
-    torch.DoubleTensor.__index = oldF
+    for torchType, t in pairs(origTorchFuncs) do
+      for _, func in ipairs(hackableTorchFuncs) do
+        torch[torchType][func] = t[func]
+      end
+    end
   end
 
   -- create edge "from" -> "to", creating "to" on the way with "name"
@@ -195,13 +202,12 @@ local function generateGraph(net, input, opts)
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
 
       if not nodes[fromPtr] then
-        local n = trickyNodes[fromPtr]
-        --print(n)
-        --print(torch.typename(n[1]))
-        local n2 = n[2]
+        local trickyNode = trickyNodes[fromPtr]
+        assert(trickyNode, "Could't handle previous node to "..name)
+        local trickyNodeName = trickyNode[2]
 
-        local pfrom = n[1].__input
-        addEdge(pfrom,from,n2)
+        local trickyParentFrom = trickyNode[1].__input
+        addEdge(trickyParentFrom,from,trickyNodeName)
       end
 
       -- insert edge
@@ -217,7 +223,7 @@ local function generateGraph(net, input, opts)
     end
   end
 
-  local old_idx_m = {}-- = {{__input=input}}
+  local stack_visited_modules = {}
 
   -- go over the network keeping track of the input/output for each module
   -- we overwrite the updateOutput for that.
@@ -225,11 +231,10 @@ local function generateGraph(net, input, opts)
     local basefunc = m.updateOutput
     m.updateOutput = function(self, input)
       self.__input = input
-      table.insert(old_idx_m,idx_m)
-      idx_m = self
+      table.insert(stack_visited_modules, current_module)
+      current_module = self
       local output = basefunc(self, input)
-      idx_m = table.remove(old_idx_m)
-      --idx_m = self
+      current_module = table.remove(stack_visited_modules)
       if isSingleOperationModule(m) then
         local name = tostring(m)
         if m.inplace then -- handle it differently ?
@@ -257,11 +262,8 @@ local function generateGraph(net, input, opts)
           addEdge(out, self.output, torch.typename(m))
         end
       end
-      --idx = idx + 1
       return output
     end
-    --print(idx)
-
   end
 
   createBoundaryNode(input, 'Input')
@@ -275,8 +277,6 @@ local function generateGraph(net, input, opts)
   -- generate the graph
   net:forward(input)
 
-  --print(trickyNodes)
-  print(old_idx_m)
   unhackTorch()
 
   if opts.addOutputNode then
@@ -302,6 +302,7 @@ local function generateGraph(net, input, opts)
   -- clean up the modified function
   net:apply(function(x)
     x.updateOutput = nil
+    x.__input = nil
   end)
 
   return g
