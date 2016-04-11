@@ -161,16 +161,21 @@ local function generateGraph(net, input, opts)
   end
 
   --local oldFuncs = {DoubleTensor={},FloatTensor={}}
+  local origTorchFuncs = {DoubleTensor={},FloatTensor={},CudaTensor={}}
+  local hackableTorchFuncs = {'select'}
   local oldF
-  local idx = 1
+  local idx_m = {__input=input}
 
   local function hackTorch()
     --oldFuncs.DoubleTensor.__index = torch.DoubleTensor.__index
-    oldF = torch.DoubleTensor.__index
-    torch.DoubleTensor.__index = function(...)
+    --oldF = torch.DoubleTensor.__index
+    oldF = torch.DoubleTensor.select
+    --torch.DoubleTensor.__index = function(...)
+    torch.DoubleTensor.select = function(...)
       local r = oldF(...)
-      trickyNodes[torch.pointer(r)] = idx
-      idx = idx+1
+      if r then
+        trickyNodes[torch.pointer(r)] = {idx_m,'select'}
+      end
       return r
     end
   end
@@ -178,13 +183,6 @@ local function generateGraph(net, input, opts)
   local function unhackTorch()
     torch.DoubleTensor.__index = oldF
   end
-
-  local m_idx = {}
-  net:apply(function(x)
-    table.insert(m_idx, x)
-  end)
-
-
 
   -- create edge "from" -> "to", creating "to" on the way with "name"
   -- the edges can be seen as linking modules, but in fact it links the output
@@ -196,20 +194,14 @@ local function generateGraph(net, input, opts)
 
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
 
-      --assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
       if not nodes[fromPtr] then
-        --[[
-        print('Printing debug')
-        print(debug.getinfo(2))
-        --]]
         local n = trickyNodes[fromPtr]
-        print(n)
-        local n2 = torch.typename(m_idx[n])
+        --print(n)
+        --print(torch.typename(n[1]))
+        local n2 = n[2]
 
-        nodes[fromPtr] = createNode(n2,from)
-        --nodes[fromPtr] = createNode('oups',from)
-        --table.insert(trickyNodes, fromPtr)
-        --trickyNodes[fromPtr] = nodes[fromPtr]
+        local pfrom = n[1].__input
+        addEdge(pfrom,from,n2)
       end
 
       -- insert edge
@@ -225,11 +217,19 @@ local function generateGraph(net, input, opts)
     end
   end
 
+  local old_idx_m = {}-- = {{__input=input}}
+
   -- go over the network keeping track of the input/output for each module
   -- we overwrite the updateOutput for that.
   local function apply_func(m)
     local basefunc = m.updateOutput
     m.updateOutput = function(self, input)
+      self.__input = input
+      table.insert(old_idx_m,idx_m)
+      idx_m = self
+      local output = basefunc(self, input)
+      idx_m = table.remove(old_idx_m)
+      --idx_m = self
       if isSingleOperationModule(m) then
         local name = tostring(m)
         if m.inplace then -- handle it differently ?
@@ -257,20 +257,26 @@ local function generateGraph(net, input, opts)
           addEdge(out, self.output, torch.typename(m))
         end
       end
-      return basefunc(self, input)
+      --idx = idx + 1
+      return output
     end
+    --print(idx)
+
   end
 
   createBoundaryNode(input, 'Input')
 
   -- fill the states from each tensor
-  net:forward(input)
+  --net:forward(input)
 
+  hackTorch()
   -- overwriting the standard functions to generate our graph
   net:apply(apply_func)
   -- generate the graph
-  hackTorch()
   net:forward(input)
+
+  --print(trickyNodes)
+  print(old_idx_m)
   unhackTorch()
 
   if opts.addOutputNode then
