@@ -281,9 +281,6 @@ local function generateGraph(net, input, opts)
 
   createBoundaryNode(input, 'Input')
 
-  -- fill the states from each tensor
-  --net:forward(input)
-
   hackTorch()
   -- overwriting the standard functions to generate our graph
   net:apply(apply_func)
