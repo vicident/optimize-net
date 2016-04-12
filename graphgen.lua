@@ -34,7 +34,6 @@ local colorNames = {
   "goldenrod","goldenrod1","goldenrod2","goldenrod3","goldenrod4"
 }
 
-
 -- some modules exist only for constructing
 -- the flow of information, and should not
 -- have their place in the computation graph
@@ -179,11 +178,12 @@ local function generateGraph(net, input, opts)
   local function hackTorch()
     for torchType, t in pairs(origTorchFuncs) do
       for _, func in ipairs(hackableTorchFuncs) do
-        oldFunc = torch[torchType][func]
+        local oldFunc = torch[torchType][func]
         t[func] = oldFunc
         torch[torchType][func] = function(...)
           local res = oldFunc(...)
           if res then
+            -- heavy use of upvalues
             trickyNodes[torch.pointer(res)] = {current_module, 'torch.'..func}
           end
           return res
@@ -241,11 +241,14 @@ local function generateGraph(net, input, opts)
   local function apply_func(m)
     local basefunc = m.updateOutput
     m.updateOutput = function(self, input)
+      -- add input to self to help keep track of it
       self.__input = input
+      -- keeps a stack of visited modules
       table.insert(stack_visited_modules, current_module)
       current_module = self
       local output = basefunc(self, input)
       current_module = table.remove(stack_visited_modules)
+      -- add edges to the graph according to the node type
       if isSingleOperationModule(m) then
         local name = tostring(m)
         if m.inplace then -- handle it differently ?
@@ -257,10 +260,9 @@ local function generateGraph(net, input, opts)
         -- those containers effectively do some computation, so they have their
         -- place in the graph
         for i,branch in ipairs(m.modules) do
-          --local last_module = branch:get(branch:size())
           local last_module
-          if branch.modues then
-            last_module = branch:get(#branch.modules)
+          if branch.modules then
+            last_module = branch:get(branch:size())
           else
             last_module = branch
           end
