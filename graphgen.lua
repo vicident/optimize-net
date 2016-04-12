@@ -104,6 +104,8 @@ local function generateGraph(net, input, opts)
   local storageHash = {}
   local nodes = {}
   local trickyNodes = {}
+  local current_module = {__input=input}
+  local stack_visited_modules = {}
 
   local g = graph.Graph()
 
@@ -161,12 +163,19 @@ local function generateGraph(net, input, opts)
   end
 
   local origTorchFuncs = {DoubleTensor={},FloatTensor={}}
+  -- also hack the cuda counter-parts if cutorch is loaded
   if package.loaded.cutorch then
     origTorchFuncs.CudaTensor = {}
   end
-  local hackableTorchFuncs = {'select'}
-  local current_module = {__input=input}
+  -- list of functions to hack. seems that can't extend due to stack
+  -- overflow reasons
+  local hackableTorchFuncs = {'select','__index'}
 
+  -- we will temporarily overwrite torch functions to keep track
+  -- of all created tensors during the forward call. This will
+  -- allow us to handle some corner cases where the input tensor is
+  -- not part of the state of a module (i.e., it's not the output
+  -- of another module)
   local function hackTorch()
     for torchType, t in pairs(origTorchFuncs) do
       for _, func in ipairs(hackableTorchFuncs) do
@@ -201,6 +210,10 @@ local function generateGraph(net, input, opts)
 
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
 
+      -- if "from" tensor is not present in "nodes" table, this means that
+      -- "from" is not the output of a module, and was created on the fly
+      -- during for example a slicing of a tensor. "trickyNodes" contains
+      -- all tensors that were generated on the fly
       if not nodes[fromPtr] then
         local trickyNode = trickyNodes[fromPtr]
         assert(trickyNode, "Could't handle previous node to "..name)
@@ -222,8 +235,6 @@ local function generateGraph(net, input, opts)
       end
     end
   end
-
-  local stack_visited_modules = {}
 
   -- go over the network keeping track of the input/output for each module
   -- we overwrite the updateOutput for that.
