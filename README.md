@@ -4,6 +4,12 @@ Memory optimizations for torch neural networks.
 
 Heavily inspired from the `Optimizer` from https://github.com/facebook/fb-caffe-exts
 
+## Installing
+Simply do
+```
+luarocks install optnet
+```
+
 ## How does it work ?
 
 It goes over the network and verify which buffers can be reused.
