@@ -199,7 +199,12 @@ local function generateGraph(net, input, opts)
         -- those containers effectively do some computation, so they have their
         -- place in the graph
         for i,branch in ipairs(m.modules) do
-          local last_module = branch:get(branch:size())
+          local last_module
+          if branch.modules then
+            last_module = branch:get(branch:size())
+          else
+            last_module = branch
+          end
           local out = last_module.output
           local ptr = torch.pointer(out)
 
