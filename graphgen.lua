@@ -168,7 +168,8 @@ local function generateGraph(net, input, opts)
 
       nodes[toPtr] = nodes[toPtr] or createNode(name,to)
 
-      assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
+      --assert(nodes[fromPtr], 'Parent node inexistant for module '.. name)
+      nodes[fromPtr] = nodes[fromPtr] or createNode('oups',from)
       
       -- insert edge
       g:add(graph.Edge(nodes[fromPtr],nodes[toPtr]))
@@ -186,7 +187,9 @@ local function generateGraph(net, input, opts)
   -- go over the network keeping track of the input/output for each module
   -- we overwrite the updateOutput for that.
   local function apply_func(m)
-    local basefunc = m.updateOutput
+    local mt = getmetatable(m)
+    mt._updateOutputBase = mt.updateOutput
+    --local basefunc = m.updateOutput
     m.updateOutput = function(self, input)
       if isSingleOperationModule(m) then
         local name = tostring(m)
@@ -213,15 +216,16 @@ local function generateGraph(net, input, opts)
           addEdge(out, self.output, torch.typename(m))
         end
       end
-      return basefunc(self, input)
+      --return basefunc(self, input)
+      return self:_updateOutputBase(input)
     end
   end
 
   createBoundaryNode(input, 'Input')
 
-  if torch.typename(net) == 'nn.DataParallelTable' then
-    net = net.modules[1]
-  end
+--  if torch.typename(net) == 'nn.DataParallelTable' then
+--    net = net.modules[1]
+--  end
 
   -- fill the states from each tensor
   net:forward(input)
@@ -253,7 +257,10 @@ local function generateGraph(net, input, opts)
 
   -- clean up the modified function
   net:apply(function(x)
+    local mt = getmetatable(x)
+    --mt.updateOutput = mt._updateOutputBase
     x.updateOutput = nil
+    mt._updateOutputBase = nil
   end)
 
   return g
