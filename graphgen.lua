@@ -219,6 +219,10 @@ local function generateGraph(net, input, opts)
 
   createBoundaryNode(input, 'Input')
 
+  if torch.typename(net) == 'nn.DataParallelTable' then
+    net = net.modules[1]
+  end
+
   -- fill the states from each tensor
   net:forward(input)
   
