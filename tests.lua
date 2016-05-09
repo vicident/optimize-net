@@ -175,7 +175,7 @@ local function genericTestRemoveOptim(model,opts)
 end
 
 for k, v in pairs(models) do
-  if k ~= 'resnet' then
+  if k ~= 'resnet' and k ~= 'preresnet' then
     optest[k] = function()
       genericTestForward(k)
     end
@@ -189,16 +189,17 @@ for k, v in pairs(models) do
 end
 
 for _, v in ipairs({20,32,56,110}) do
-  local k = 'resnet'
-  local opts = {dataset='cifar10',depth=v}
-  optest[k..v] = function()
-    genericTestForward(k, opts)
-  end
-  optest[k..v..'_backward'] = function()
-    genericTestBackward(k, opts)
-  end
-  optest[k..v..'_remove'] = function()
-    genericTestRemoveOptim(k, opts)
+  for _, k in ipairs{'resnet', 'preresnet'} do
+    local opts = {dataset='cifar10',depth=v}
+    optest[k..v] = function()
+      genericTestForward(k, opts)
+    end
+    optest[k..v..'_backward'] = function()
+      genericTestBackward(k, opts)
+    end
+    optest[k..v..'_remove'] = function()
+      genericTestRemoveOptim(k, opts)
+    end
   end
 end
 
@@ -213,7 +214,8 @@ function optnet.test(tests, opts)
   if opts.only_basic_tests then
     local disable = {
       'alexnet','vgg','googlenet',
-      'resnet20','resnet32','resnet56','resnet110'
+      'resnet20','resnet32','resnet56','resnet110',
+      'preresnet20','preresnet32','preresnet56','preresnet110'
     }
     local toDisable = {}
     for _, v in ipairs(disable) do
