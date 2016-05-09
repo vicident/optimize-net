@@ -23,7 +23,7 @@ Here is a list of currently tested modules. Numbers are for CPU version, with ba
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
 |alexnet | (973MB, 6MB, 43MB, 924MB) | (472MB, 1.5MB, 9MB, 462MB) | (51%, 75%, 80%, 50%) |
-|vgg16 | (2311MB, 69MB, 215MB, 2027MB) | (1106MB, 31MB, 61MB, 1014MB) | (52%, 55%, 72%, 50%) |
+|vgg-A | (2311MB, 69MB, 215MB, 2027MB) | (1106MB, 31MB, 61MB, 1014MB) | (52%, 55%, 72%, 50%) |
 |googlenet | (505MB, 69MB, 145MB, 292MB) | (193MB, 31MB, 16MB, 146MB) | (62%, 54%, 89%, 50%) |
 |resnet 110 (cifar)| (113MB, 16MB, 71MB, 26MB) | (15MB, 0.5MB, 1.3MB, 13MB) | (87%, 97%, 98%, 50%) |
 
@@ -36,7 +36,7 @@ way more significant, specially for very deep networks like resnet. The memory u
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
 |alexnet | (859MB, 397MB, 462MB) | (328MB, 97MB, 231MB) | (62%, 75%, 50%) |
-|vgg16 | (5340MB, 4386MB, 1014MB) | (2467MB, 1960MB, 507MB) | (54%, 55%, 50%) |
+|vgg-A | (5340MB, 4386MB, 1014MB) | (2467MB, 1960MB, 507MB) | (54%, 55%, 50%) |
 |googlenet | (4536MB, 4390MB, 146MB) | (2066MB, 1993MB, 73MB) | (54%, 55%, 50%) |
 |resnet 110 (cifar)| (1049MB, 1036MB, 13MB) | (39MB, 32MB, 7MB) | (96%, 97%, 50%) |
 
@@ -48,7 +48,7 @@ Using `cudnn` with batch size of 64, we currently obtain the following savings, 
 | Network | before optimization | after optimization | Relative save |
 | ------- | :--------: | :-------: | :------: |
 |alexnet | (963MB, 195MB, 303MB, 462MB) | (816MB, 195MB, 156MB, 462MB) | (15%, 0%, 48%, 0%) |
-|vgg16 | (5433MB, 2191MB, 2228MB, 1014MB) | (4228MB, 2191MB, 1023MB, 1014MB) | (22%, 0%, 54%, 0%) |
+|vgg-A | (5433MB, 2191MB, 2228MB, 1014MB) | (4228MB, 2191MB, 1023MB, 1014MB) | (22%, 0%, 54%, 0%) |
 |googlenet | (6092MB, 2195MB, 3346MB, 146MB) | (4844MB, 2195MB, 2098MB, 146MB) | (20%, 0%, 37%, 0%) |
 |resnet 110 (cifar)| (664MB, 259MB, 392MB, 13MB) | (428MB, 259MB, 156MB, 13MB) | (36%, 0%, 60%, 0%) |
 

@@ -253,13 +253,13 @@ models.googlenet = function()
 
 end
 
-models.vgg = function()
+models.vgg = function(modelType)
   -- taken from soumith's imagenet-multiGPU
   -- https://github.com/soumith/imagenet-multiGPU.torch/blob/master/models/vgg.lua
 
   local nClasses = 1000
 
-  local modelType = 'A' -- on a titan black, B/D/E run out of memory even for batch-size 32
+  local modelType = modelType or 'A' -- on a titan black, B/D/E run out of memory even for batch-size 32
 
   -- Create tables describing VGG configurations A, B, D, E
   local cfg = {}
