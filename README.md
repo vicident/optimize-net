@@ -14,6 +14,7 @@ luarocks install optnet
 
 It goes over the network and verify which buffers can be reused.
 It supports both evaluation mode and training mode.
+More details can be found in [details.md](details.md).
 
 ### Evaluation mode
 
