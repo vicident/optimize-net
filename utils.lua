@@ -32,4 +32,17 @@ local function recursiveClone(out)
 end
 utils.recursiveClone = recursiveClone
 
+local function copyTable(t)
+  if type(t) == 'table' then
+    local r = {}
+    for k, v in pairs(t) do
+      r[k] = copyTable(v)
+    end
+    return r
+  else
+    return t
+  end
+end
+utils.copyTable = copyTable
+
 return utils

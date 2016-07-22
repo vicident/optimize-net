@@ -47,6 +47,28 @@ models.basic_deep_conv = function()
   return m, input
 end
 
+models.basic_unpooling = function()
+  local inplace = true
+  local m = nn.Sequential()
+  m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  m:add(nn.ReLU(inplace))
+  local mp1 = nn.SpatialMaxPooling(2,2,2,2)
+  m:add(mp1)
+  m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  m:add(nn.ReLU(inplace))
+  local mp2 = nn.SpatialMaxPooling(2,2,2,2)
+  m:add(mp2)
+  m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  m:add(nn.ReLU(inplace))
+  m:add(nn.SpatialMaxUnpooling(mp2))
+  m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  m:add(nn.ReLU(inplace))
+  m:add(nn.SpatialMaxUnpooling(mp1))
+  m:add(nn.SpatialConvolution(1,1,3,3,1,1,1,1))
+  local input = torch.rand(1,1,32,32)
+  return m, input
+end
+
 models.siamese = function()
   local inplace = false
   local b1 = nn.Sequential()

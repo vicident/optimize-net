@@ -270,6 +270,12 @@ local function reuseStateBuffers(net, opts)
   if mode == 'training' then
     mode_idx = 2
   end
+  -- workaround SpatialMaxUnpooling corner case
+  -- https://github.com/fmassa/optimize-net/issues/14
+  local reusableBuffers = utils.copyTable(reusableBuffers)
+  if #net:findModules('nn.SpatialMaxUnpooling') > 0 then
+    reusableBuffers['nn.SpatialMaxPooling'] = {{},{}}
+  end
   if reuseBuffers then
     local reusedBuffers = {}
     net:apply(function(m)
