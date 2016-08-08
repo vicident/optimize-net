@@ -202,15 +202,25 @@ local function assign(net, analysis)
   local assignments = {}
   for _,candidate in ipairs(analysis) do
     local assigned = false
-    for _, assignment in ipairs(assignments) do
+    local bestAssignment = 0
+    local minDist = math.huge
+    local candidateSize = candidate.tensor:numel()
+    for idx, assignment in ipairs(assignments) do
       if isCompatible(candidate, assignment) then
-        table.insert(assignment,candidate)
         assigned = true
-        break
+        local dist = math.abs(assignment.maxSize-candidateSize)
+        if dist < minDist then
+          minDist = dist
+          bestAssignment = idx
+        end
       end
     end
-    if not assigned then
-      table.insert(assignments, {candidate})
+    if assigned then
+      local assignment = assignments[bestAssignment]
+      table.insert(assignment, candidate)
+      assignment.maxSize = math.max(assignment.maxSize, candidateSize)
+    else
+      table.insert(assignments, {candidate, maxSize=candidateSize})
     end
   end
   return assignments
