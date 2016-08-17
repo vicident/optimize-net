@@ -72,7 +72,7 @@ optnet.optimizeMemory(net, input, opts)
 
 Here is a list of options that are currently supported, and should be passed in the `opts` table as a third argument:
 * `inplace`: uses in place modules when available (boolean)
-* `mode`: selects between `training` and `evaluation` optimization algorithm (string)
+* `mode`: selects between `training` and `inference` optimization algorithm (string)
 * `reuseBuffers`: shares internal buffers between same modules (like unfolded images for convolution) (boolean)
 * `removeGradParams`: remove `gradWeight` and `gradBias` in the networks, saving their sharings so that they can be exactly reconstructed. Only applies for `evaluation` mode (boolean)
 
