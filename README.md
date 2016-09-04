@@ -13,9 +13,9 @@ luarocks install optnet
 ## How does it work ?
 
 It goes over the network and verify which buffers can be reused.
-It supports both evaluation mode and training mode.
+It supports both inference (evaluation) mode and training mode.
 
-### Evaluation mode
+### Inference mode
 
 Here is a list of currently tested modules. Numbers are for CPU version, with batch size of 1, for **double** type, in the format
 **(total memory used, memory used for the outputs, memory used for the internal buffers, memory used for the parameters and grad parameters)**:
@@ -74,7 +74,7 @@ Here is a list of options that are currently supported, and should be passed in 
 * `inplace`: uses in place modules when available (boolean)
 * `mode`: selects between `training` and `inference` optimization algorithm (string)
 * `reuseBuffers`: shares internal buffers between same modules (like unfolded images for convolution) (boolean)
-* `removeGradParams`: remove `gradWeight` and `gradBias` in the networks, saving their sharings so that they can be exactly reconstructed. Only applies for `evaluation` mode (boolean)
+* `removeGradParams`: remove `gradWeight` and `gradBias` in the networks, saving their sharings so that they can be exactly reconstructed. Only applies for `inference` mode (boolean)
 
 ## Visualizing the memory reuse
 
