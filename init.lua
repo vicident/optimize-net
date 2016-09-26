@@ -265,6 +265,8 @@ end
 
 local reusableBuffers = {
 ['nn.SpatialConvolution'] = {{'finput','fgradInput'},{'fgradInput'}},
+['nn.SpatialConvolutionClassic'] = {{'fgradInput'},{'fgradInput'}},
+['nn.SpatialFullConvolution'] = {{'finput','fgradInput'},{'fgradInput'}},
 ['nn.SpatialConvolutionMM'] = {{'finput','fgradInput'},{'fgradInput'}},
 ['nn.Normalize'] = {{'norm','buffer','normp','_indices'},{}},
 ['nn.SpatialCrossMapLRN'] = {{'scale'},{}},
